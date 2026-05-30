@@ -1028,6 +1028,20 @@ local function makeSlider(name, parent, lo, hi, step, x, y, onChange, fmt)
         value = onChange(value)
         if valText then valText:SetText(fmt(value)) end
     end)
+
+    -- Stepper buttons either side of the slider for fine adjustment. SetValue
+    -- clamps to the min/max and fires OnValueChanged, so onChange and the value
+    -- label update run just as they do for a drag.
+    local function stepper(label, anchorDX, delta)
+        local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+        b:SetSize(22, 22)
+        b:SetPoint("LEFT", s, "RIGHT", anchorDX, 0)
+        b:SetText(label)
+        b:SetScript("OnClick", function() s:SetValue(s:GetValue() + delta) end)
+        return b
+    end
+    stepper("-", 8, -step)
+    stepper("+", 32, step)
     return s
 end
 
@@ -1047,9 +1061,9 @@ local function buildConfig()
         function(v) v = math.floor(v + 0.5); db.size = v; resizeAll(); layout(); return v end,
         function(v) return "Button size: " .. v .. " px" end)
 
-    local spacing = makeSlider("MinimapIconBarSpacingSlider", config, 0, 16, 1, 24, -160,
-        function(v) v = math.floor(v + 0.5); db.spacing = v; layout(); return v end,
-        function(v) return "Spacing: " .. v .. " px" end)
+    local spacing = makeSlider("MinimapIconBarSpacingSlider", config, 0, 16, 0.5, 24, -160,
+        function(v) v = math.floor(v * 2 + 0.5) / 2; db.spacing = v; layout(); return v end,
+        function(v) return ("Spacing: %.1f px"):format(v) end)
 
     local perRow = makeSlider("MinimapIconBarPerRowSlider", config, 1, 12, 1, 24, -208,
         function(v) v = math.floor(v + 0.5); db.buttonsPerRow = v; layout(); return v end,
@@ -1392,9 +1406,9 @@ SlashCmdList["MINIMAPICONBAR"] = function(input)
         else print("Usage: /mib size 32") end
     elseif cmd == "spacing" then
         local v = tonumber(arg)
-        if v then db.spacing = math.max(0, math.min(32, math.floor(v))); layout()
+        if v then db.spacing = math.max(0, math.min(32, math.floor(v * 2 + 0.5) / 2)); layout()
             msg("spacing = " .. db.spacing .. " px")
-        else print("Usage: /mib spacing 0") end
+        else print("Usage: /mib spacing 0.5") end
     elseif cmd == "perrow" then
         local v = tonumber(arg)
         if v then db.buttonsPerRow = math.max(1, math.min(12, math.floor(v))); layout()
