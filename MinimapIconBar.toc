@@ -10,9 +10,7 @@
 ## AddonCompartmentFunc: MinimapIconBarCompartmentOnClick
 ## AddonCompartmentFuncOnEnter: MinimapIconBarCompartmentOnEnter
 ## AddonCompartmentFuncOnLeave: MinimapIconBarCompartmentOnLeave
-# Fill these in once the CurseForge / Wago projects exist (see RELEASING.md),
-# then uncomment so the packager publishes to them:
-# ## X-Curse-Project-ID: 000000
-# ## X-Wago-ID: 000000
+## X-Curse-Project-ID: 1559070
+## X-Wago-ID: kNM3r3Kz
 
 MinimapIconBar.lua
