@@ -36,6 +36,7 @@ ACCENT = (90, 150, 210)
 FRAME = (150, 170, 200)
 TITLE = "Minimap Icon Bar"
 TAGLINE = "Your minimap buttons, in one tidy bar."
+SUBTAG = "Masque / ElvUI aware  ·  per-character profiles"
 
 
 def load_logo():
@@ -138,13 +139,15 @@ def make_banner(logo, w, h):
     img.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(h * 0.02)))
     img.alpha_composite(icon, (ix, iy))
 
-    # Title + tagline.
+    # Title + tagline + feature subline.
     tx = ix + isz + int(h * 0.12)
     d = ImageDraw.Draw(img)
-    d.text((tx, int(h * 0.27)), TITLE, font=font(int(h * 0.22)),
+    d.text((tx, int(h * 0.22)), TITLE, font=font(int(h * 0.22)),
            fill=(238, 244, 248, 255))
-    d.text((tx, int(h * 0.56)), TAGLINE, font=font(int(h * 0.11), bold=False),
+    d.text((tx, int(h * 0.52)), TAGLINE, font=font(int(h * 0.11), bold=False),
            fill=(150, 178, 212, 255))
+    d.text((tx, int(h * 0.70)), SUBTAG, font=font(int(h * 0.085), bold=False),
+           fill=(120, 146, 178, 255))
     return img
 
 
