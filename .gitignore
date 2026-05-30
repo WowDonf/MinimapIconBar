@@ -1,0 +1,16 @@
+# BigWigs packager working directory
+.release/
+.pkg/
+
+# Built zip artifacts (if someone runs the packager locally)
+*.zip
+
+# Python tooling
+__pycache__/
+*.pyc
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

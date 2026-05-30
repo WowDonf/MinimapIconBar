@@ -1,0 +1,18 @@
+## Interface: 120005
+## Title: Minimap Icon Bar
+## Notes: Collects your minimap buttons into one movable, action-bar-style icon bar. Masque/ElvUI aware, with per-character profiles.
+## Author: WowDonf
+## Version: v1.0.0
+## SavedVariables: MinimapIconBarDB
+## OptionalDeps: Masque, ElvUI
+## IconTexture: Interface\AddOns\MinimapIconBar\logo
+## Category-enUS: Minimap
+## AddonCompartmentFunc: MinimapIconBarCompartmentOnClick
+## AddonCompartmentFuncOnEnter: MinimapIconBarCompartmentOnEnter
+## AddonCompartmentFuncOnLeave: MinimapIconBarCompartmentOnLeave
+# Fill these in once the CurseForge / Wago projects exist (see RELEASING.md),
+# then uncomment so the packager publishes to them:
+# ## X-Curse-Project-ID: 000000
+# ## X-Wago-ID: 000000
+
+MinimapIconBar.lua
