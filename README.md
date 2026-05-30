@@ -3,6 +3,8 @@
 Collects the loose addon buttons scattered around your minimap into one
 movable, action-bar-style row — de-circled, squared off, and skinnable.
 
+![Minimap Icon Bar](assets/Banner-1280.png)
+
 ## What it does
 
 Most addons drop a round button onto the edge of your minimap. Get a few

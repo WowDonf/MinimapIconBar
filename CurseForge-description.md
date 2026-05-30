@@ -42,5 +42,5 @@ skin, profile, cleanup, reset).
 
 ## Compatibility
 
-WoW Midnight (Interface 120005). No required dependencies; Masque and
+WoW Midnight. No required dependencies; Masque and
 ElvUI are optional and used only for skinning if present.

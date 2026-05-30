@@ -8,6 +8,7 @@
 # Python tooling
 __pycache__/
 *.pyc
+tools/.venv/
 
 # Editor / OS
 .DS_Store
