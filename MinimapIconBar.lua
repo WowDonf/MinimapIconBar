@@ -838,6 +838,15 @@ local function toggleLock()
         or  "unlocked.")
 end
 
+-- Ctrl-click the M: toggle "Lock open" (keep the bar expanded; a click
+-- won't collapse it). Independent of the position lock above.
+local function toggleLockOpen()
+    db.lockOpen = not db.lockOpen
+    if db.lockOpen then setOpen(true) else layout() end
+    msg("lock open " .. (db.lockOpen and "on" or "off"))
+    if config and config.Refresh and config:IsShown() then config.Refresh() end
+end
+
 -- ===========================================================================
 -- Position
 -- ===========================================================================
@@ -976,6 +985,8 @@ local function buildFrames()
             toggleOptions()
         elseif IsShiftKeyDown and IsShiftKeyDown() then
             toggleLock()
+        elseif IsControlKeyDown and IsControlKeyDown() then
+            toggleLockOpen()
         else
             toggleOpen()
         end
@@ -985,6 +996,7 @@ local function buildFrames()
         GameTooltip:AddLine("Minimap Icon Bar")
         GameTooltip:AddLine("Left-click: open / close", 0.8, 0.8, 0.8)
         GameTooltip:AddLine("Shift-click: lock / unlock", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("Ctrl-click: keep open / allow close", 0.8, 0.8, 0.8)
         GameTooltip:AddLine("Right-click: options", 0.8, 0.8, 0.8)
         GameTooltip:AddLine("Drag: move", 0.8, 0.8, 0.8)
         GameTooltip:Show()
@@ -1138,10 +1150,6 @@ local function buildConfig()
     reset:SetPoint("LEFT", rescan, "RIGHT", 12, 0)
     reset:SetText("Reset")
     reset:SetScript("OnClick", resetSettings)
-
-    local reorderNote = config:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    reorderNote:SetPoint("TOPLEFT", 24, -518)
-    reorderNote:SetText("|cff999999Tip: when the bar is unlocked, drag the M to move it, and drag icons to reorder them.|r")
 
     function config.Refresh()
         scale:SetValue(db.scale or 1.0)
