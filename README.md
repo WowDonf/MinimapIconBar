@@ -34,8 +34,8 @@ picked up automatically.
 - **Drag-to-reorder**: unlock the bar and drag icons to rearrange them;
   the order is saved per profile.
 - **Lock in place**: shift-click the M (or use the Movement option) to
-  freeze the bar — its position *and* its open/closed state are locked
-  until you shift-click again.
+  show the icons and freeze the bar — its position and the expanded icons
+  are locked until you shift-click again, which lets you collapse it.
 - **Per-character profiles** by default, with named profiles you can
   create, copy, and share across alts.
 - **Automatic pickup** of buttons as addons are enabled — instant for

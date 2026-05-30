@@ -44,7 +44,7 @@ local SKIN_TEXT  = {
 local LOCK_ORDER = { "unlocked", "locked" }
 local LOCK_TEXT  = {
     unlocked = "Unlocked (drag freely)",
-    locked   = "Locked (position and open state frozen)",
+    locked   = "Locked (icons shown, frozen in place)",
 }
 
 local GROWTH_ORDER = { "DOWN_RIGHT", "DOWN_LEFT", "UP_RIGHT", "UP_LEFT" }
@@ -819,15 +819,23 @@ local function toggleOpen()
     setOpen(not db.isOpen)
 end
 
--- Shift-click the M to freeze the bar in place: locks its position AND its
--- current open/closed state. Shift-click again to unlock. Mirrors the
--- "Movement" option in the panel, so both stay in sync.
-local function toggleLock()
-    db.lockMode = (db.lockMode == "locked") and "unlocked" or "locked"
-    msg(db.lockMode == "locked"
-        and "locked (position and open state frozen)."
-        or  "unlocked.")
+-- Apply a lock mode. Locking shows the icons and freezes them in place
+-- (position + open state); unlocking leaves them shown but lets a normal
+-- click collapse them again. Shift-click the M, the panel's Movement
+-- option, and /mib lock|unlock|move all route through here so they stay
+-- in sync.
+local function applyLockMode(mode)
+    db.lockMode = (mode == "locked") and "locked" or "unlocked"
+    if db.lockMode == "locked" then setOpen(true) end   -- show icons, then frozen
     if config and config.Refresh and config:IsShown() then config.Refresh() end
+end
+
+-- Shift-click the M: toggle the lock.
+local function toggleLock()
+    applyLockMode(db.lockMode == "locked" and "unlocked" or "locked")
+    msg(db.lockMode == "locked"
+        and "locked (icons shown and frozen in place)."
+        or  "unlocked.")
 end
 
 -- ===========================================================================
@@ -1064,9 +1072,9 @@ local function buildConfig()
     local move = CreateFrame("Frame", "MinimapIconBarMoveDropDown", config, "UIDropDownMenuTemplate")
     move:SetPoint("TOPLEFT", 8, -323)
     local function onMovePick(self)
-        db.lockMode = self.value
-        UIDropDownMenu_SetSelectedValue(move, self.value)
-        UIDropDownMenu_SetText(move, LOCK_TEXT[self.value])
+        applyLockMode(self.value)
+        UIDropDownMenu_SetSelectedValue(move, db.lockMode)
+        UIDropDownMenu_SetText(move, LOCK_TEXT[db.lockMode])
     end
     UIDropDownMenu_Initialize(move, function()
         for _, value in ipairs(LOCK_ORDER) do
@@ -1285,17 +1293,14 @@ SlashCmdList["MINIMAPICONBAR"] = function(input)
     elseif cmd == "reset" then
         resetSettings()
     elseif cmd == "lock" then
-        db.lockMode = "locked"
-        if config and config.Refresh and config:IsShown() then config.Refresh() end
-        msg("locked (position and open state frozen).")
+        applyLockMode("locked")
+        msg("locked (icons shown and frozen in place).")
     elseif cmd == "unlock" then
-        db.lockMode = "unlocked"
-        if config and config.Refresh and config:IsShown() then config.Refresh() end
+        applyLockMode("unlocked")
         msg("unlocked.")
     elseif cmd == "move" then
         local v = arg:lower()
-        if LOCK_TEXT[v] then db.lockMode = v
-            if config and config.Refresh and config:IsShown() then config.Refresh() end
+        if LOCK_TEXT[v] then applyLockMode(v)
             msg("movement = " .. LOCK_TEXT[v])
         else print("Usage: /mib move unlocked | locked") end
     elseif cmd == "skin" then

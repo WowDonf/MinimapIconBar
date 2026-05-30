@@ -18,9 +18,9 @@ Initial release.
   buttons-per-row, and growth direction (right/left × up/down).
 - **Drag-to-reorder** when the bar is unlocked; icon order is saved per
   profile.
-- **Lock in place**: shift-click the M (or the Movement option) to freeze
-  the bar — its position *and* its open/closed state are locked until you
-  shift-click again.
+- **Lock in place**: shift-click the M (or the Movement option) to show
+  the icons and freeze the bar in place; shift-click again to unlock and
+  allow collapsing it.
 - **Per-character profiles** by default, plus named profiles you can
   create, copy, and share across characters.
 - **Automatic button pickup**: instant for LibDBIcon buttons via a
