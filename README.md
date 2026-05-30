@@ -34,9 +34,10 @@ picked up automatically.
 - **Drag-to-reorder**: unlock the bar and drag icons to rearrange them;
   the order is saved per profile.
 - **Lock in place**: shift-click the M (or use the Movement option) to
-  freeze the bar's position; shift-click again to unlock. Ctrl-click the M
-  to keep it expanded so a click won't collapse it (the "Lock open"
-  option); ctrl-click again to allow closing.
+  lock the bar; shift-click again to unlock. Locking pins the position and
+  captures the open/closed state — lock it while open and it stays open
+  (a click won't close it); lock it while closed and a click can still
+  open or close it. Either way it can't be dragged.
 - **Per-character profiles** by default, with named profiles you can
   create, copy, and share across alts.
 - **Automatic pickup** of buttons as addons are enabled — instant for
@@ -60,9 +61,7 @@ Click the **M** button (or type `/mib`) to get started.
 | --- | --- |
 | `/mib` | open the options panel |
 | `/mib toggle` | open / close the bar |
-| shift-click the M | lock / unlock the bar's position |
-| ctrl-click the M | keep open / allow close (the "Lock open" option) |
-| `/mib lockopen on\|off` | keep the bar expanded (click won't close it) |
+| shift-click the M | lock / unlock (pins position + open state) |
 | `/mib scale N` | whole-bar scale, 0.5 – 2.0 |
 | `/mib size N` | button size in px |
 | `/mib spacing N` | gap between buttons in px (0 = flush) |

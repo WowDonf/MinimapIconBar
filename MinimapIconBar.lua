@@ -27,8 +27,8 @@ local DEFAULTS = {
     buttonsPerRow = 6,
     growth        = "DOWN_RIGHT",
     isOpen        = false,
-    lockOpen      = false,               -- keep the bar expanded; click won't close it
     lockMode      = "unlocked",          -- "unlocked" | "locked"
+    lockedOpen    = false,               -- open/closed state captured when locked
     skinStyle     = "auto",              -- "auto" | "default" | "elvui" | "masque"
     order         = {},                  -- saved icon order (list of button names)
 }
@@ -44,7 +44,7 @@ local SKIN_TEXT  = {
 local LOCK_ORDER = { "unlocked", "locked" }
 local LOCK_TEXT  = {
     unlocked = "Unlocked (drag freely)",
-    locked   = "Locked (icons shown, frozen in place)",
+    locked   = "Locked (position and open state)",
 }
 
 local GROWTH_ORDER = { "DOWN_RIGHT", "DOWN_LEFT", "UP_RIGHT", "UP_LEFT" }
@@ -71,6 +71,7 @@ local function fillDefaults(t)
     if t.lockMode == nil then t.lockMode = t.locked and "locked" or "unlocked" end
     if t.lockMode == "editmode" then t.lockMode = "unlocked" end   -- removed "Only in Edit Mode" mode
     t.locked = nil
+    t.lockOpen = nil   -- removed "Lock open" option
 end
 
 -- ===========================================================================
@@ -808,43 +809,33 @@ end
 -- Open / close
 -- ===========================================================================
 local function setOpen(open)
-    if db.lockOpen then open = true end
     db.isOpen = open and true or false
     if db.isOpen then scanMinimap() end
     layout()
 end
 local function toggleOpen()
-    if db.lockMode == "locked" then return end   -- fully locked: open state frozen
-    if db.lockOpen then return end   -- locked open: clicking won't collapse it
+    -- Locked open: the bar was locked while expanded, so a click can't close it.
+    -- Locked closed: a click may still open/close it. Either way it can't be dragged.
+    if db.lockMode == "locked" and db.lockedOpen then return end
     setOpen(not db.isOpen)
 end
 
--- Apply a lock mode. Locking shows the icons and freezes them in place
--- (position + open state); unlocking leaves them shown but lets a normal
--- click collapse them again. Shift-click the M, the panel's Movement
--- option, and /mib lock|unlock|move all route through here so they stay
--- in sync.
+-- Apply a lock mode. Locking captures the current open/closed state (so a bar
+-- locked while open stays open and frozen, while one locked closed can still be
+-- opened/closed by a click) and pins the position. Shift-click the M, the
+-- panel's Movement option, and /mib lock|unlock|move all route through here so
+-- they stay in sync.
 local function applyLockMode(mode)
     db.lockMode = (mode == "locked") and "locked" or "unlocked"
-    if db.lockMode == "locked" then setOpen(true) end   -- show icons, then frozen
+    if db.lockMode == "locked" then db.lockedOpen = db.isOpen and true or false end
+    layout()
     if config and config.Refresh and config:IsShown() then config.Refresh() end
 end
 
 -- Shift-click the M: toggle the lock.
 local function toggleLock()
     applyLockMode(db.lockMode == "locked" and "unlocked" or "locked")
-    msg(db.lockMode == "locked"
-        and "locked (icons shown and frozen in place)."
-        or  "unlocked.")
-end
-
--- Ctrl-click the M: toggle "Lock open" (keep the bar expanded; a click
--- won't collapse it). Independent of the position lock above.
-local function toggleLockOpen()
-    db.lockOpen = not db.lockOpen
-    if db.lockOpen then setOpen(true) else layout() end
-    msg("lock open " .. (db.lockOpen and "on" or "off"))
-    if config and config.Refresh and config:IsShown() then config.Refresh() end
+    msg(db.lockMode == "locked" and "locked." or "unlocked.")
 end
 
 -- ===========================================================================
@@ -871,7 +862,6 @@ end
 -- Apply everything
 -- ===========================================================================
 local function applyAll()
-    if db.lockOpen then db.isOpen = true end
     bar:SetScale(db.scale or 1.0)
     restorePosition()
     reskinAll()
@@ -985,8 +975,6 @@ local function buildFrames()
             toggleOptions()
         elseif IsShiftKeyDown and IsShiftKeyDown() then
             toggleLock()
-        elseif IsControlKeyDown and IsControlKeyDown() then
-            toggleLockOpen()
         else
             toggleOpen()
         end
@@ -996,9 +984,7 @@ local function buildFrames()
         GameTooltip:AddLine("Minimap Icon Bar")
         GameTooltip:AddLine("Left-click: open / close", 0.8, 0.8, 0.8)
         GameTooltip:AddLine("Shift-click: lock / unlock", 0.8, 0.8, 0.8)
-        GameTooltip:AddLine("Ctrl-click: keep open / allow close", 0.8, 0.8, 0.8)
         GameTooltip:AddLine("Right-click: options", 0.8, 0.8, 0.8)
-        GameTooltip:AddLine("Drag: move", 0.8, 0.8, 0.8)
         GameTooltip:Show()
     end)
     toggle:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1111,17 +1097,6 @@ local function buildConfig()
     end)
     UIDropDownMenu_SetWidth(move, 180)
 
-    -- Lock open ------------------------------------------------------------
-    local lockOpen = CreateFrame("CheckButton", "MinimapIconBarLockOpenCheck", config, "InterfaceOptionsCheckButtonTemplate")
-    lockOpen:SetPoint("TOPLEFT", 24, -364)
-    _G["MinimapIconBarLockOpenCheckText"]:SetText("Lock open (stay expanded; click won't close it)")
-    lockOpen:SetScript("OnClick", function(self)
-        db.lockOpen = self:GetChecked() and true or false
-        if db.lockOpen then setOpen(true) end
-        layout()
-    end)
-    config.lockOpenCheck = lockOpen
-
     -- Skin profile --------------------------------------------------------
     local skinLabel = config:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     skinLabel:SetPoint("TOPLEFT", 24, -400)
@@ -1174,7 +1149,6 @@ local function buildConfig()
         UIDropDownMenu_SetText(growth, GROWTH_TEXT[db.growth or "DOWN_RIGHT"])
         UIDropDownMenu_SetSelectedValue(move, db.lockMode or "unlocked")
         UIDropDownMenu_SetText(move, LOCK_TEXT[db.lockMode or "unlocked"])
-        lockOpen:SetChecked(db.lockOpen and true or false)
         UIDropDownMenu_SetSelectedValue(skin, db.skinStyle or "auto")
         UIDropDownMenu_SetText(skin, SKIN_TEXT[db.skinStyle or "auto"])
         local active = chosenSkin()
@@ -1305,10 +1279,6 @@ SlashCmdList["MINIMAPICONBAR"] = function(input)
         toggleOptions()
     elseif cmd == "toggle" then
         toggleOpen()
-    elseif cmd == "lockopen" then
-        db.lockOpen = (arg == "on" or arg == "1" or arg == "true")
-        if db.lockOpen then setOpen(true) else layout() end
-        msg("lock open " .. (db.lockOpen and "on" or "off"))
     elseif cmd == "rescan" or cmd == "cleanup" then
         local found, removed = refreshBar()
         msg(("cleaned up (%s added, %d removed)."):format(found and "new" or "0", removed))
@@ -1423,7 +1393,6 @@ SlashCmdList["MINIMAPICONBAR"] = function(input)
         print(PREFIX .. " commands:")
         print("  /mib            - open options (Blizzard settings)")
         print("  /mib toggle     - open/close")
-        print("  /mib lockopen on|off - keep the bar expanded")
         print("  /mib scale N    - whole-bar scale 0.5-2.0")
         print("  /mib size N     - button size in px")
         print("  /mib spacing N  - gap in px (0 = flush)")

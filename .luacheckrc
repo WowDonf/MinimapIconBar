@@ -45,8 +45,7 @@ read_globals = {
     -- Textures / atlas
     "C_Texture",
     -- Input / cursor
-    "GetCursorPosition", "GetMouseFoci", "GetMouseFocus",
-    "IsShiftKeyDown", "IsControlKeyDown",
+    "GetCursorPosition", "GetMouseFoci", "GetMouseFocus", "IsShiftKeyDown",
     -- Unit / realm identity (profile keys)
     "UnitName", "GetRealmName",
     -- Tables / misc
