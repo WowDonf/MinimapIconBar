@@ -28,7 +28,7 @@ local DEFAULTS = {
     growth        = "DOWN_RIGHT",
     isOpen        = false,
     lockOpen      = false,               -- keep the bar expanded; click won't close it
-    lockMode      = "unlocked",          -- "unlocked" | "locked" | "editmode"
+    lockMode      = "unlocked",          -- "unlocked" | "locked"
     skinStyle     = "auto",              -- "auto" | "default" | "elvui" | "masque"
     order         = {},                  -- saved icon order (list of button names)
 }
@@ -41,11 +41,10 @@ local SKIN_TEXT  = {
     masque  = "Masque",
 }
 
-local LOCK_ORDER = { "unlocked", "locked", "editmode" }
+local LOCK_ORDER = { "unlocked", "locked" }
 local LOCK_TEXT  = {
     unlocked = "Unlocked (drag freely)",
-    locked   = "Locked",
-    editmode = "Only in Edit Mode",
+    locked   = "Locked (position and open state frozen)",
 }
 
 local GROWTH_ORDER = { "DOWN_RIGHT", "DOWN_LEFT", "UP_RIGHT", "UP_LEFT" }
@@ -70,6 +69,7 @@ local function fillDefaults(t)
         end
     end
     if t.lockMode == nil then t.lockMode = t.locked and "locked" or "unlocked" end
+    if t.lockMode == "editmode" then t.lockMode = "unlocked" end   -- removed "Only in Edit Mode" mode
     t.locked = nil
 end
 
@@ -130,7 +130,6 @@ local isCollected  = {}
 local bar, toggle, config, configProfiles
 local E, ELVUI
 local Masque, MasqueGroup
-local inEditMode = false
 local pendingScan = false   -- a scan was requested during combat; run it after
 local optionsCategory   -- Blizzard Settings category for this addon
 
@@ -183,18 +182,9 @@ local function toggleOptions()
     if optionsShown() then closeOptions() else openOptions() end
 end
 
--- May the bar be dragged right now?
+-- May the bar be dragged right now? (Only when fully unlocked.)
 local function canMove()
-    local m = (db and db.lockMode) or "unlocked"
-    if m == "unlocked" then return true end
-    if m == "editmode" then return inEditMode end
-    return false
-end
-
-local function updateEditHighlight()
-    if bar and bar.editHighlight then
-        bar.editHighlight:SetShown(inEditMode and db.lockMode == "editmode")
-    end
+    return ((db and db.lockMode) or "unlocked") == "unlocked"
 end
 
 -- ===========================================================================
@@ -824,8 +814,20 @@ local function setOpen(open)
     layout()
 end
 local function toggleOpen()
+    if db.lockMode == "locked" then return end   -- fully locked: open state frozen
     if db.lockOpen then return end   -- locked open: clicking won't collapse it
     setOpen(not db.isOpen)
+end
+
+-- Shift-click the M to freeze the bar in place: locks its position AND its
+-- current open/closed state. Shift-click again to unlock. Mirrors the
+-- "Movement" option in the panel, so both stay in sync.
+local function toggleLock()
+    db.lockMode = (db.lockMode == "locked") and "unlocked" or "locked"
+    msg(db.lockMode == "locked"
+        and "locked (position and open state frozen)."
+        or  "unlocked.")
+    if config and config.Refresh and config:IsShown() then config.Refresh() end
 end
 
 -- ===========================================================================
@@ -948,13 +950,6 @@ local function buildFrames()
     bar:SetClampedToScreen(true)
     bar:SetMovable(true)
 
-    -- Highlight shown during Edit Mode when the bar is set to "Only in Edit Mode".
-    local hl = bar:CreateTexture(nil, "OVERLAY")
-    hl:SetAllPoints(bar)
-    hl:SetColorTexture(1, 0.82, 0, 0.25)
-    hl:Hide()
-    bar.editHighlight = hl
-
     toggle = CreateFrame("Button", "MinimapIconBarButton", bar)
     toggle:SetSize(db.size, db.size)
     toggle:SetMovable(true)
@@ -971,6 +966,8 @@ local function buildFrames()
     toggle:SetScript("OnClick", function(_, mouseButton)
         if mouseButton == "RightButton" then
             toggleOptions()
+        elseif IsShiftKeyDown and IsShiftKeyDown() then
+            toggleLock()
         else
             toggleOpen()
         end
@@ -979,6 +976,7 @@ local function buildFrames()
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine("Minimap Icon Bar")
         GameTooltip:AddLine("Left-click: open / close", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("Shift-click: lock / unlock", 0.8, 0.8, 0.8)
         GameTooltip:AddLine("Right-click: options", 0.8, 0.8, 0.8)
         GameTooltip:AddLine("Drag: move", 0.8, 0.8, 0.8)
         GameTooltip:Show()
@@ -1069,7 +1067,6 @@ local function buildConfig()
         db.lockMode = self.value
         UIDropDownMenu_SetSelectedValue(move, self.value)
         UIDropDownMenu_SetText(move, LOCK_TEXT[self.value])
-        updateEditHighlight()
     end
     UIDropDownMenu_Initialize(move, function()
         for _, value in ipairs(LOCK_ORDER) do
@@ -1288,16 +1285,19 @@ SlashCmdList["MINIMAPICONBAR"] = function(input)
     elseif cmd == "reset" then
         resetSettings()
     elseif cmd == "lock" then
-        db.lockMode = "locked"; updateEditHighlight()
-        msg("locked.")
+        db.lockMode = "locked"
+        if config and config.Refresh and config:IsShown() then config.Refresh() end
+        msg("locked (position and open state frozen).")
     elseif cmd == "unlock" then
-        db.lockMode = "unlocked"; updateEditHighlight()
+        db.lockMode = "unlocked"
+        if config and config.Refresh and config:IsShown() then config.Refresh() end
         msg("unlocked.")
     elseif cmd == "move" then
         local v = arg:lower()
-        if LOCK_TEXT[v] then db.lockMode = v; updateEditHighlight()
+        if LOCK_TEXT[v] then db.lockMode = v
+            if config and config.Refresh and config:IsShown() then config.Refresh() end
             msg("movement = " .. LOCK_TEXT[v])
-        else print("Usage: /mib move unlocked | locked | editmode") end
+        else print("Usage: /mib move unlocked | locked") end
     elseif cmd == "skin" then
         local v = arg:lower()
         if SKIN_TEXT[v] then
@@ -1402,7 +1402,7 @@ SlashCmdList["MINIMAPICONBAR"] = function(input)
         print("  /mib spacing N  - gap in px (0 = flush)")
         print("  /mib perrow N   - buttons per row 1-12 (incl. the M icon)")
         print("  /mib growth DIR - down_right|down_left|up_right|up_left")
-        print("  /mib move unlocked|locked|editmode")
+        print("  /mib move unlocked|locked  (shift-click the M also toggles lock)")
         print("  (unlock the bar, then drag icons to reorder them)")
         print("  /mib skin auto|default|elvui|masque")
         print("  /mib profile set|new|copy|delete NAME")
@@ -1485,12 +1485,6 @@ boot:SetScript("OnEvent", function(_, event)
     buildConfig()
     buildProfileConfig()
     applyAll()
-
-    -- Edit Mode: enable dragging only while the HUD Edit Mode is open.
-    if _G.EditModeManagerFrame then
-        EditModeManagerFrame:HookScript("OnShow", function() inEditMode = true;  updateEditHighlight() end)
-        EditModeManagerFrame:HookScript("OnHide", function() inEditMode = false; updateEditHighlight() end)
-    end
 
     -- Pick up buttons deferred because we were in combat at the time.
     boot:RegisterEvent("PLAYER_REGEN_ENABLED")

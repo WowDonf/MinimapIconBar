@@ -29,7 +29,7 @@ stays put as it grows or shrinks.
 - **Configurable layout**: button size, spacing, whole-bar scale,
   buttons-per-row, and growth direction (right/left × up/down).
 - **Drag-to-reorder** icons; order saved per profile.
-- **Movement modes**: unlocked, locked, or Edit-Mode-only.
+- **Lock in place**: shift-click the M to freeze position + open state.
 - **Per-character profiles** plus named profiles shareable across alts.
 - **Automatic pickup** of buttons as addons are enabled.
 - **Combat-safe** and **addon-compartment** integrated.

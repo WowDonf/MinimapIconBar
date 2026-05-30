@@ -32,7 +32,7 @@ read_globals = {
     "Minimap", "MinimapBackdrop",
     "Settings", "SettingsPanel", "HideUIPanel",
     "GameTooltip",
-    "EditModeManagerFrame", "AddonCompartmentFrame",
+    "AddonCompartmentFrame",
     "StaticPopup_Show",
     -- Dropdown menu helpers (UIDropDownMenuTemplate)
     "UIDropDownMenu_Initialize", "UIDropDownMenu_CreateInfo",
@@ -45,7 +45,7 @@ read_globals = {
     -- Textures / atlas
     "C_Texture",
     -- Input / cursor
-    "GetCursorPosition", "GetMouseFoci", "GetMouseFocus",
+    "GetCursorPosition", "GetMouseFoci", "GetMouseFocus", "IsShiftKeyDown",
     -- Unit / realm identity (profile keys)
     "UnitName", "GetRealmName",
     -- Tables / misc

@@ -33,8 +33,9 @@ picked up automatically.
   buttons-per-row, and growth direction (right/left × up/down).
 - **Drag-to-reorder**: unlock the bar and drag icons to rearrange them;
   the order is saved per profile.
-- **Movement modes**: unlocked, locked, or draggable only while the HUD
-  Edit Mode is open.
+- **Lock in place**: shift-click the M (or use the Movement option) to
+  freeze the bar — its position *and* its open/closed state are locked
+  until you shift-click again.
 - **Per-character profiles** by default, with named profiles you can
   create, copy, and share across alts.
 - **Automatic pickup** of buttons as addons are enabled — instant for
@@ -58,13 +59,14 @@ Click the **M** button (or type `/mib`) to get started.
 | --- | --- |
 | `/mib` | open the options panel |
 | `/mib toggle` | open / close the bar |
+| shift-click the M | lock / unlock (freezes position + open state) |
 | `/mib lockopen on\|off` | keep the bar expanded (click won't close it) |
 | `/mib scale N` | whole-bar scale, 0.5 – 2.0 |
 | `/mib size N` | button size in px |
 | `/mib spacing N` | gap between buttons in px (0 = flush) |
 | `/mib perrow N` | buttons per row, 1 – 12 (incl. the M icon) |
 | `/mib growth DIR` | `down_right` \| `down_left` \| `up_right` \| `up_left` |
-| `/mib move unlocked\|locked\|editmode` | movement mode |
+| `/mib move unlocked\|locked` | movement mode |
 | `/mib skin auto\|default\|elvui\|masque` | skin profile |
 | `/mib profile set\|new\|copy\|delete NAME` | manage profiles (`list` to list) |
 | `/mib cleanup` | rescan for added/removed buttons |
