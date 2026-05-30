@@ -1015,19 +1015,19 @@ local function makeSlider(name, parent, lo, hi, step, x, y, onChange, fmt)
         if valText then valText:SetText(fmt(value)) end
     end)
 
-    -- Stepper buttons either side of the slider for fine adjustment. SetValue
-    -- clamps to the min/max and fires OnValueChanged, so onChange and the value
-    -- label update run just as they do for a drag.
-    local function stepper(label, anchorDX, delta)
+    -- Stepper buttons flanking the slider for fine adjustment: - on the left,
+    -- + on the right. SetValue clamps to the min/max and fires OnValueChanged,
+    -- so onChange and the value label update just as they do for a drag.
+    local function stepper(label, point, relPoint, dx, delta)
         local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
         b:SetSize(22, 22)
-        b:SetPoint("LEFT", s, "RIGHT", anchorDX, 0)
+        b:SetPoint(point, s, relPoint, dx, 0)
         b:SetText(label)
         b:SetScript("OnClick", function() s:SetValue(s:GetValue() + delta) end)
         return b
     end
-    stepper("-", 8, -step)
-    stepper("+", 32, step)
+    stepper("-", "RIGHT", "LEFT",  -4, -step)
+    stepper("+", "LEFT",  "RIGHT",  4,  step)
     return s
 end
 
