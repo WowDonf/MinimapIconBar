@@ -997,8 +997,11 @@ end
 -- ===========================================================================
 local function makeSlider(name, parent, lo, hi, step, x, y, onChange, fmt)
     local s = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
-    s:SetPoint("TOPLEFT", x, y)
-    s:SetWidth(220)
+    -- Shift right of the row's left margin (x) so the - stepper, anchored to the
+    -- slider's left edge, lines up with the margin instead of bleeding off the
+    -- panel. Narrower track keeps the + stepper on-panel.
+    s:SetPoint("TOPLEFT", x + 26, y)
+    s:SetWidth(184)
     s:SetMinMaxValues(lo, hi)
     s:SetValueStep(step)
     s:SetObeyStepOnDrag(true)
