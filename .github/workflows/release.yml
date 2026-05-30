@@ -8,13 +8,13 @@ on:
     tags:
       - 'v*'
 
-# Needed for GitHub Releases to be created by the packager.
-permissions:
-  contents: write
-
 jobs:
   release:
     runs-on: ubuntu-latest
+    # Scoped to this job (least privilege): only `release` needs write access
+    # to create the GitHub Release. Any job added later stays read-only.
+    permissions:
+      contents: write
     env:
       # Configure these secrets under Settings → Secrets and variables → Actions.
       # GITHUB_OAUTH is auto-provided; nothing to add for it.
