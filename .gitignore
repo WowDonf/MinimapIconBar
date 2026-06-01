@@ -1,17 +1,27 @@
-# BigWigs packager working directory
+# BigWigs packager build artifacts
 .release/
 .pkg/
-
-# Built zip artifacts (if someone runs the packager locally)
+release/
 *.zip
 
-# Python tooling
+# Python tooling (asset/build scripts under tools/)
 __pycache__/
 *.pyc
 tools/.venv/
 
-# Editor / OS
-.DS_Store
+# Editor / IDE
 .idea/
 .vscode/
+*.code-workspace
 *.swp
+*.swo
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Lua bytecode / backups (if you ever run luac locally)
+*.luac
+*.lua.bak

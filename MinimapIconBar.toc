@@ -6,7 +6,7 @@
 ## SavedVariables: MinimapIconBarDB
 ## OptionalDeps: Masque, ElvUI
 ## IconTexture: Interface\AddOns\MinimapIconBar\logo
-## Category-enUS: Minimap
+## Category-enUS: MinimapIconBar
 ## AddonCompartmentFunc: MinimapIconBarCompartmentOnClick
 ## AddonCompartmentFuncOnEnter: MinimapIconBarCompartmentOnEnter
 ## AddonCompartmentFuncOnLeave: MinimapIconBarCompartmentOnLeave
