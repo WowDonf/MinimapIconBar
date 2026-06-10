@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.0
+
+- **Supports game versions 12.0.5 and 12.0.7** from a single build (the
+  TOC now declares both interface versions), so the addon loads without an
+  out-of-date flag on either client.
+- **Options dropdowns rebuilt on the modern menu API.** The growth,
+  movement, skin, and profile dropdowns now use the current dropdown
+  widget instead of the deprecated `UIDropDownMenu`, which is a known
+  source of Edit Mode taint. No change to how they look or behave.
+
 ## v1.0.0
 
 Initial release.

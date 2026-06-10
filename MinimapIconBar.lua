@@ -1034,6 +1034,28 @@ local function makeSlider(name, parent, lo, hi, step, x, y, onChange, fmt)
     return s
 end
 
+-- Single-select dropdown (replaces the deprecated UIDropDownMenu, which taints
+-- Edit Mode). `order` is the value list, `textOf` maps a value to its label,
+-- `get` returns the current value, `set` applies a pick. The button text is
+-- derived automatically from the selected radio; the menu refreshes itself
+-- after a click, and config.Refresh() calls dd:GenerateMenu() to re-sync it
+-- when the value changes elsewhere (profile switch, /mib command, ...).
+local function makeDropdown(name, parent, x, y, width, order, textOf, get, set)
+    local dd = CreateFrame("DropdownButton", name, parent, "WowStyle1DropdownTemplate")
+    dd:SetPoint("TOPLEFT", x, y)
+    dd:SetWidth(width)
+    dd:SetupMenu(function(_, root)
+        for _, value in ipairs(order) do
+            root:CreateRadio(
+                textOf[value],
+                function(v) return get() == v end,
+                function(v) set(v) end,
+                value)
+        end
+    end)
+    return dd
+end
+
 local function buildConfig()
     config = CreateFrame("Frame", "MinimapIconBarOptionsPanel")
     config:Hide()
@@ -1062,64 +1084,30 @@ local function buildConfig()
     growthLabel:SetPoint("TOPLEFT", 24, -250)
     growthLabel:SetText("Growth direction")
 
-    local growth = CreateFrame("Frame", "MinimapIconBarGrowthDropDown", config, "UIDropDownMenuTemplate")
-    growth:SetPoint("TOPLEFT", 8, -265)
-    local function onPick(self)
-        db.growth = self.value
-        UIDropDownMenu_SetSelectedValue(growth, self.value)
-        UIDropDownMenu_SetText(growth, GROWTH_TEXT[self.value])
-        layout()
-    end
-    UIDropDownMenu_Initialize(growth, function()
-        for _, value in ipairs(GROWTH_ORDER) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text, info.value, info.func = GROWTH_TEXT[value], value, onPick
-            UIDropDownMenu_AddButton(info)
-        end
-    end)
-    UIDropDownMenu_SetWidth(growth, 180)
+    local growth = makeDropdown("MinimapIconBarGrowthDropDown", config, 24, -265, 200,
+        GROWTH_ORDER, GROWTH_TEXT,
+        function() return db.growth or "DOWN_RIGHT" end,
+        function(v) db.growth = v; layout() end)
 
     -- Movement -------------------------------------------------------------
     local moveLabel = config:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     moveLabel:SetPoint("TOPLEFT", 24, -308)
     moveLabel:SetText("Movement")
 
-    local move = CreateFrame("Frame", "MinimapIconBarMoveDropDown", config, "UIDropDownMenuTemplate")
-    move:SetPoint("TOPLEFT", 8, -323)
-    local function onMovePick(self)
-        applyLockMode(self.value)
-        UIDropDownMenu_SetSelectedValue(move, db.lockMode)
-        UIDropDownMenu_SetText(move, LOCK_TEXT[db.lockMode])
-    end
-    UIDropDownMenu_Initialize(move, function()
-        for _, value in ipairs(LOCK_ORDER) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text, info.value, info.func = LOCK_TEXT[value], value, onMovePick
-            UIDropDownMenu_AddButton(info)
-        end
-    end)
-    UIDropDownMenu_SetWidth(move, 180)
+    local move = makeDropdown("MinimapIconBarMoveDropDown", config, 24, -323, 200,
+        LOCK_ORDER, LOCK_TEXT,
+        function() return db.lockMode or "unlocked" end,
+        function(v) applyLockMode(v) end)
 
     -- Skin profile --------------------------------------------------------
     local skinLabel = config:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     skinLabel:SetPoint("TOPLEFT", 24, -400)
     skinLabel:SetText("Skin profile")
 
-    local skin = CreateFrame("Frame", "MinimapIconBarSkinDropDown", config, "UIDropDownMenuTemplate")
-    skin:SetPoint("TOPLEFT", 8, -415)
-    local function onSkinPick(self)
-        UIDropDownMenu_SetSelectedValue(skin, self.value)
-        UIDropDownMenu_SetText(skin, SKIN_TEXT[self.value])
-        applySkinChoice(self.value)
-    end
-    UIDropDownMenu_Initialize(skin, function()
-        for _, value in ipairs(SKIN_ORDER) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text, info.value, info.func = SKIN_TEXT[value], value, onSkinPick
-            UIDropDownMenu_AddButton(info)
-        end
-    end)
-    UIDropDownMenu_SetWidth(skin, 260)
+    local skin = makeDropdown("MinimapIconBarSkinDropDown", config, 24, -415, 260,
+        SKIN_ORDER, SKIN_TEXT,
+        function() return db.skinStyle or "auto" end,
+        function(v) applySkinChoice(v) end)
 
     local skinNote = config:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     skinNote:SetPoint("TOPLEFT", 26, -452)
@@ -1148,12 +1136,9 @@ local function buildConfig()
         size:SetValue(db.size or 32)
         spacing:SetValue(db.spacing or 2)
         perRow:SetValue(db.buttonsPerRow or 6)
-        UIDropDownMenu_SetSelectedValue(growth, db.growth or "DOWN_RIGHT")
-        UIDropDownMenu_SetText(growth, GROWTH_TEXT[db.growth or "DOWN_RIGHT"])
-        UIDropDownMenu_SetSelectedValue(move, db.lockMode or "unlocked")
-        UIDropDownMenu_SetText(move, LOCK_TEXT[db.lockMode or "unlocked"])
-        UIDropDownMenu_SetSelectedValue(skin, db.skinStyle or "auto")
-        UIDropDownMenu_SetText(skin, SKIN_TEXT[db.skinStyle or "auto"])
+        growth:GenerateMenu()
+        move:GenerateMenu()
+        skin:GenerateMenu()
         local active = chosenSkin()
         local activeText = (active == "masque" and "Masque")
             or (active == "elvui" and "ElvUI")
@@ -1194,18 +1179,18 @@ local function buildProfileConfig()
     curLabel:SetPoint("TOPLEFT", 24, -78)
     curLabel:SetText("Active profile")
 
-    local dd = CreateFrame("Frame", "MinimapIconBarProfileDropDown", configProfiles, "UIDropDownMenuTemplate")
-    dd:SetPoint("TOPLEFT", 8, -93)
-    UIDropDownMenu_Initialize(dd, function()
+    local dd = CreateFrame("DropdownButton", "MinimapIconBarProfileDropDown", configProfiles, "WowStyle1DropdownTemplate")
+    dd:SetPoint("TOPLEFT", 24, -93)
+    dd:SetWidth(240)
+    dd:SetDefaultText("Default")
+    dd:SetupMenu(function(_, root)
         for _, name in ipairs(profileNames()) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text, info.value = name, name
-            info.func = function(self) activateProfile(self.value) end
-            info.checked = (name == activeProfile)
-            UIDropDownMenu_AddButton(info)
+            root:CreateRadio(name,
+                function(n) return n == activeProfile end,
+                function(n) activateProfile(n) end,
+                name)
         end
     end)
-    UIDropDownMenu_SetWidth(dd, 220)
 
     local nameLabel = configProfiles:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     nameLabel:SetPoint("TOPLEFT", 24, -136)
@@ -1259,8 +1244,7 @@ local function buildProfileConfig()
     delBtn:SetScript("OnClick", function() StaticPopup_Show("MINIMAPICONBAR_DELPROFILE") end)
 
     function configProfiles.Refresh()
-        UIDropDownMenu_SetSelectedValue(dd, activeProfile)
-        UIDropDownMenu_SetText(dd, activeProfile or "Default")
+        dd:GenerateMenu()
     end
     configProfiles:SetScript("OnShow", function() configProfiles.Refresh() end)
 
