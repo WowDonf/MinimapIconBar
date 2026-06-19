@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.2.0
+
+- **Optionally collect the expansion landing-page button** (the 12.0.7
+  Omnium Folio / renown button) into the bar like any other icon. Off by
+  default; enable it under *Blizzard buttons* in the options. It keeps its
+  native Blizzard icon and is sized, slotted, skinned, and draggable like
+  the rest of the row. Turning the option back off restores it to the
+  minimap after a UI reload.
+- **Supports game version 12.1.0** and 12.0.7; the
+  12.0.5 interface is dropped now that 12.0.7 is live.
+
 ## v1.1.0
 
 - **Supports game versions 12.0.5 and 12.0.7** from a single build (the

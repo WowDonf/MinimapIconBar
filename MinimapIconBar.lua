@@ -31,6 +31,9 @@ local DEFAULTS = {
     lockedOpen    = false,               -- open/closed state captured when locked
     skinStyle     = "auto",              -- "auto" | "default" | "elvui" | "masque"
     order         = {},                  -- saved icon order (list of button names)
+    collectLandingPage = false,          -- opt-in: also grab Blizzard's expansion
+                                         -- landing-page button (the Omnium Folio /
+                                         -- renown button), normally left in place
 }
 
 local SKIN_ORDER = { "auto", "default", "elvui", "masque" }
@@ -369,7 +372,27 @@ end
 -- re-run when switching profiles - it never re-detects or re-strips.
 local function applySkin(btn)
     local icon = btn.__mbcIcon
-    if not icon then return end
+    if not icon then
+        -- Native Blizzard button (the landing-page / Omnium Folio button): no
+        -- managed icon to skin, but give it the active profile's backdrop behind
+        -- its own art so it isn't bare next to the others. Skin libraries need an
+        -- icon handle we don't manage here, so default/masque get the stock slot.
+        if btn.__mbcLandingPage then
+            local s = chosenSkin()
+            clearSkinState(btn, s)
+            if s == "elvui" then
+                pcall(function()
+                    if btn.CreateBackdrop and not btn.__mbcElvSkin then
+                        btn:CreateBackdrop(); btn.__mbcElvSkin = true
+                    end
+                    if btn.backdrop then btn.backdrop:Show() end
+                end)
+            else
+                actionBarSkin(btn, nil)
+            end
+        end
+        return
+    end
     local skin = chosenSkin()
     clearSkinState(btn, skin)
     if skin == "masque" then
@@ -498,6 +521,18 @@ StaticPopupDialogs["MINIMAPICONBAR_RELOAD"] = {
     timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
 }
 
+-- Once the expansion landing-page button has been reparented and re-skinned,
+-- handing it back to Blizzard's minimap layout cleanly is impractical at
+-- runtime, so turning the option off takes effect on a UI reload (it simply
+-- isn't grabbed next login). Turning it on applies instantly.
+StaticPopupDialogs["MINIMAPICONBAR_RELOAD_LANDINGPAGE"] = {
+    text = "Minimap Icon Bar: releasing the expansion landing-page button needs a UI reload to restore it to the minimap. Reload now?",
+    button1 = "Reload now",
+    button2 = "Later",
+    OnAccept = function() ReloadUI() end,
+    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+}
+
 -- ===========================================================================
 -- Lock owning addon out of moving / reparenting / resizing
 -- ===========================================================================
@@ -509,6 +544,14 @@ local function lockButton(btn)
     btn.__mbcOrigSetSize   = btn.SetSize
     local noop = function() end
     btn.SetPoint, btn.SetParent, btn.SetSize = noop, noop, noop
+    -- The landing-page button re-runs its own ClearAllPoints+SetPoint on events;
+    -- with SetPoint noop'd, an open ClearAllPoints would strip our anchor and
+    -- leave it point-less (invisible). Block it too - only that button needs it.
+    if btn.__mbcLandingPage and btn.ClearAllPoints then btn.ClearAllPoints = noop end
+    -- Blizzard re-applies its own scale / ignore-parent-scale to the landing-page
+    -- button on events; lock both so it keeps the row scale we set.
+    if btn.__mbcLandingPage and btn.SetScale then btn.SetScale = noop end
+    if btn.__mbcLandingPage and btn.SetIgnoreParentScale then btn.SetIgnoreParentScale = noop end
     -- Block the standard move API so an owning addon's own drag can never shift
     -- the button (our reorder moves it via the saved original SetPoint instead).
     if btn.StartMoving then btn.StartMoving = noop end
@@ -562,15 +605,20 @@ end
 function layout()
     if not bar then return end
 
+    -- The landing-page button is Blizzard-managed and briefly hides itself during
+    -- its own updates, which would flag it "owner-hidden" and make layout skip
+    -- placing it (stranding it at a stale spot on top of the row). It's always a
+    -- member while collected, so ignore owner-hidden for it.
+    local function shown(b) return b.__mbcLandingPage or not b.__mbcOwnerHidden end
     local items = { toggle }
     if db.isOpen then
         for _, b in ipairs(collected) do
-            if not b.__mbcOwnerHidden then items[#items + 1] = b end
+            if shown(b) then items[#items + 1] = b end
         end
     end
     internalToggle = true
     for _, b in ipairs(collected) do
-        if db.isOpen and not b.__mbcOwnerHidden then b:Show() else b:Hide() end
+        if db.isOpen and shown(b) then b:Show() else b:Hide() end
     end
     internalToggle = false
 
@@ -721,6 +769,63 @@ end
 -- ===========================================================================
 -- Collection
 -- ===========================================================================
+-- Blizzard's expansion landing-page button (the Omnium Folio / renown button in
+-- 12.0.7) doesn't fit the de-circle-and-reskin pipeline: its art is a composite,
+-- state-dependent atlas that blanks when stripped. So we keep its native art and
+-- make it a normal bar member instead. That takes a few Blizzard-specific
+-- fixups, each of which was a distinct symptom:
+--   * reparent onto the bar - it sits at LOW strata under MinimapCluster, which
+--     a child can't escape, so it always drew behind the MEDIUM bar icons;
+--   * SetIgnoreParentScale(false) + match a sibling's scale - Blizzard has it
+--     ignore parent scale, so it rendered huge and mis-placed (anchor offsets
+--     are in the frame's own scaled units);
+--   * pin oversized textures to the frame - its art is drawn larger than the
+--     frame and overhangs onto the neighbours;
+--   * lockButton - drag-to-reorder + lock SetPoint/SetParent/SetSize/SetScale/
+--     ClearAllPoints/SetIgnoreParentScale so Blizzard can't undo any of it.
+-- __mbcLandingPage marks it so the prune/owner-hidden paths (which assume a
+-- reparented, self-managed addon button) treat it correctly.
+local function collectLandingPageButton()
+    if not db.collectLandingPage then return false end
+    local btn = _G.ExpansionLandingPageMinimapButton
+    if not btn or btn == toggle or btn == bar or isCollected[btn] then return false end
+    isCollected[btn] = true
+    collected[#collected + 1] = btn
+    btn.__mbcLandingPage = true
+    if btn.ClearAllPoints then btn:ClearAllPoints() end
+    if btn.SetParent then btn:SetParent(bar) end
+    -- Blizzard sets this button to IGNORE its parent's scale, so on the bar it
+    -- renders at full size regardless of the bar's scale ("massive"). Make it
+    -- respect the parent, then match a row icon's own scale so it's sized like
+    -- the row. lockButton locks both so Blizzard can't reset them.
+    if btn.SetIgnoreParentScale then btn:SetIgnoreParentScale(false) end
+    local refScale
+    for _, sib in ipairs(collected) do
+        if sib ~= btn and not sib.__mbcLandingPage and sib.GetScale then
+            refScale = sib:GetScale(); break
+        end
+    end
+    if btn.SetScale then btn:SetScale(refScale or 1) end
+    if btn.SetFrameStrata then btn:SetFrameStrata(bar:GetFrameStrata()) end
+    if btn.SetFrameLevel then btn:SetFrameLevel((bar:GetFrameLevel() or 1) + 10) end
+    setSize(btn, db.size or 32)   -- size the frame to the row
+    -- Blizzard draws this button's textures larger than its frame, so they
+    -- overhang the slot and cover the neighbours. Pin any oversized texture to
+    -- the frame so the art fits its slot too. SetAllPoints tracks the frame, so
+    -- this keeps working when the size slider changes the frame.
+    local bw = btn:GetWidth() or db.size or 32
+    for i = 1, (btn.GetNumRegions and btn:GetNumRegions() or 0) do
+        local r = select(i, btn:GetRegions())
+        if r and r.IsObjectType and r:IsObjectType("Texture")
+           and (r:GetWidth() or 0) > bw + 1 then
+            r:ClearAllPoints(); r:SetAllPoints(btn)
+        end
+    end
+    lockButton(btn)   -- drag-to-reorder + lock the move API (no strip/reskin)
+    applySkin(btn)    -- backdrop behind the native art
+    return true
+end
+
 local function scanMinimap()
     -- Reparenting a button during combat can trip the protected-frame guard, so
     -- defer collection until combat ends (PLAYER_REGEN_ENABLED runs it then).
@@ -744,6 +849,7 @@ local function scanMinimap()
             end
         end
     end
+    if collectLandingPageButton() then found = true end
     if found then applyOrder(); layout() end
     return found
 end
@@ -755,7 +861,9 @@ local function pruneCollected()
     local kept, removed = {}, 0
     for _, b in ipairs(collected) do
         local valid = type(b) == "table" and b.IsObjectType and b:IsObjectType("Frame")
-            and b.GetParent and b:GetParent() == bar
+            -- The landing-page button is anchored to the bar but kept on its own
+            -- (native) parent, so it's valid even though its parent isn't `bar`.
+            and (b.__mbcLandingPage or (b.GetParent and b:GetParent() == bar))
         if valid then
             kept[#kept + 1] = b
         else
@@ -1056,6 +1164,21 @@ local function makeDropdown(name, parent, x, y, width, order, textOf, get, set)
     return dd
 end
 
+-- A labelled checkbox. The label is our own font string anchored to the box
+-- rather than the template's, so it survives Blizzard swapping the checkbutton
+-- template internals. Exposes :Refresh() to re-sync from the profile.
+local function makeCheck(name, parent, x, y, label, get, set)
+    local c = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
+    c:SetPoint("TOPLEFT", x, y)
+    c:SetSize(26, 26)
+    local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    fs:SetPoint("LEFT", c, "RIGHT", 2, 1)
+    fs:SetText(label)
+    c:SetScript("OnClick", function(self) set(self:GetChecked() and true or false) end)
+    c.Refresh = function() c:SetChecked(get() and true or false) end
+    return c
+end
+
 local function buildConfig()
     config = CreateFrame("Frame", "MinimapIconBarOptionsPanel")
     config:Hide()
@@ -1131,6 +1254,28 @@ local function buildConfig()
     reset:SetText("Reset")
     reset:SetScript("OnClick", resetSettings)
 
+    -- Blizzard buttons ----------------------------------------------------
+    local landingLabel = config:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    landingLabel:SetPoint("TOPLEFT", 24, -522)
+    landingLabel:SetText("Blizzard buttons")
+
+    local landing = makeCheck("MinimapIconBarLandingPageCheck", config, 24, -538,
+        "Collect the expansion landing-page button (Omnium Folio / renown)",
+        function() return db.collectLandingPage end,
+        function(on)
+            if (db.collectLandingPage and true or false) == on then return end
+            db.collectLandingPage = on
+            if on then
+                scanMinimap()   -- grab it now; turning it off waits for a reload
+            else
+                StaticPopup_Show("MINIMAPICONBAR_RELOAD_LANDINGPAGE")
+            end
+        end)
+
+    local landingNote = config:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    landingNote:SetPoint("TOPLEFT", 26, -562)
+    landingNote:SetText("Blizzard's own button. Edit Mode may still reposition it; turning this off restores it to the minimap on reload.")
+
     function config.Refresh()
         scale:SetValue(db.scale or 1.0)
         size:SetValue(db.size or 32)
@@ -1139,6 +1284,7 @@ local function buildConfig()
         growth:GenerateMenu()
         move:GenerateMenu()
         skin:GenerateMenu()
+        landing:Refresh()
         local active = chosenSkin()
         local activeText = (active == "masque" and "Masque")
             or (active == "elvui" and "ElvUI")

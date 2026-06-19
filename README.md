@@ -42,6 +42,10 @@ picked up automatically.
   create, copy, and share across alts.
 - **Automatic pickup** of buttons as addons are enabled — instant for
   LibDBIcon buttons, with a lightweight polling backstop for the rest.
+- **Omnium Folio button (12.0.7)**: optionally collect Blizzard's
+  expansion landing-page / Omnium Folio button into the bar as well —
+  opt-in under *Blizzard buttons* (off by default). It keeps its native
+  icon and is sized, slotted, skinned, and draggable like everything else.
 - **Combat-safe**: collection that would reparent a frame is deferred out
   of combat, and the options panel won't open mid-combat.
 - **Addon compartment entry** next to the minimap clock: left-click

@@ -32,6 +32,10 @@ stays put as it grows or shrinks.
 - **Lock in place**: shift-click the M to freeze position + open state.
 - **Per-character profiles** plus named profiles shareable across alts.
 - **Automatic pickup** of buttons as addons are enabled.
+- **Omnium Folio button (12.0.7)**: optionally pull in Blizzard's
+  expansion landing-page / Omnium Folio button too — opt-in under
+  *Blizzard buttons* (off by default). It keeps its native icon and is
+  sized, slotted, skinned, and draggable like the rest of the row.
 - **Combat-safe** and **addon-compartment** integrated.
 
 ## Slash commands
