@@ -1,6 +1,6 @@
 <!-- Project Summary (the short ~150-char field on CurseForge/Wago, separate
      from this long description):
-     Collects loose minimap addon buttons into one movable, action-bar-style row. De-circled, skinnable (Masque/ElvUI), with per-character profiles.
+     Collects loose minimap buttons into one movable, action-bar-style row. De-circled, skinnable (Masque/ElvUI), with optional Omnium Folio capture.
 -->
 
 # Minimap Icon Bar
