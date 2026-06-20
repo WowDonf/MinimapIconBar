@@ -4,8 +4,9 @@
 
 - **Optionally collect the expansion landing-page button** (the 12.0.7
   Omnium Folio / renown button) into the bar like any other icon. Off by
-  default; enable it under *Blizzard buttons* in the options. It keeps its
-  native Blizzard icon and is sized, slotted, skinned, and draggable like
+  default; enable it under *Blizzard buttons* in the options. It shows a
+  bundled Omnium Folio icon whose orb is tinted to your class colour, and
+  is sized, slotted, skinned (default / ElvUI / Masque), and draggable like
   the rest of the row. Turning the option back off restores it to the
   minimap after a UI reload.
 - **Supports game version 12.1.0** and 12.0.7; the

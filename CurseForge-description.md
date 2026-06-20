@@ -34,8 +34,9 @@ stays put as it grows or shrinks.
 - **Automatic pickup** of buttons as addons are enabled.
 - **Omnium Folio button (12.0.7)**: optionally pull in Blizzard's
   expansion landing-page / Omnium Folio button too — opt-in under
-  *Blizzard buttons* (off by default). It keeps its native icon and is
-  sized, slotted, skinned, and draggable like the rest of the row.
+  *Blizzard buttons* (off by default). Its orb is tinted to your class
+  colour, and it's sized, slotted, skinned, and draggable like the rest of
+  the row.
 - **Combat-safe** and **addon-compartment** integrated.
 
 ## Slash commands

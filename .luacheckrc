@@ -47,7 +47,7 @@ read_globals = {
     -- Input / cursor
     "GetCursorPosition", "GetMouseFoci", "GetMouseFocus", "IsShiftKeyDown",
     -- Unit / realm identity (profile keys)
-    "UnitName", "GetRealmName",
+    "UnitName", "GetRealmName", "UnitClass", "RAID_CLASS_COLORS",
     -- Tables / misc
     "wipe", "hooksecurefunc", "ReloadUI",
     -- Optional dependencies (probed via _G but sometimes referenced bare)

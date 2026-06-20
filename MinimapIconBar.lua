@@ -123,6 +123,14 @@ local BORDER_OVERSIZE   = 1.12  -- a texture >112% of the button is a ring/borde
 local ICON_CROP         = 0.06  -- fraction trimmed off each icon edge (de-circle the art)
 local ATLAS_FRAME_INSET = 0.08  -- HUD icon-frame overhang, as a fraction of button size
 local QUICKSLOT_SCALE   = 1.83  -- classic Quickslot border size relative to the button
+-- Textures for the landing-page (Omnium Folio) button. Blizzard's own art is a
+-- dynamic multi-layer atlas no skin can crop, so we hide it and draw our own two
+-- layers instead: a silver FRAME (the managed icon - each skin frames/scales it)
+-- with a transparent centre, and a grayscale ORB tinted to the player's class
+-- colour, anchored behind the frame so it tracks under any skin. (Both .tga files
+-- ship at the addon root.)
+local LANDINGPAGE_FRAME = "Interface\\AddOns\\MinimapIconBar\\OmniumFolioFrame.tga"
+local LANDINGPAGE_ORB   = "Interface\\AddOns\\MinimapIconBar\\OmniumFolioOrb.tga"
 
 -- ===========================================================================
 -- State
@@ -195,6 +203,7 @@ end
 -- ===========================================================================
 -- Helpers
 -- ===========================================================================
+local function noop() end   -- shared no-op used to neutralize locked APIs
 local function setSize(frame, s)  (frame.__mbcOrigSetSize  or frame.SetSize )(frame, s, s) end
 local function setPoint(frame, ...) (frame.__mbcOrigSetPoint or frame.SetPoint)(frame, ...) end
 
@@ -371,29 +380,10 @@ end
 
 -- Apply the chosen profile to an already-prepared button. Idempotent: safe to
 -- re-run when switching profiles - it never re-detects or re-strips.
+
 local function applySkin(btn)
     local icon = btn.__mbcIcon
-    if not icon then
-        -- Native Blizzard button (the landing-page / Omnium Folio button): no
-        -- managed icon to skin, but give it the active profile's backdrop behind
-        -- its own art so it isn't bare next to the others. Skin libraries need an
-        -- icon handle we don't manage here, so default/masque get the stock slot.
-        if btn.__mbcLandingPage then
-            local s = chosenSkin()
-            clearSkinState(btn, s)
-            if s == "elvui" then
-                pcall(function()
-                    if btn.CreateBackdrop and not btn.__mbcElvSkin then
-                        btn:CreateBackdrop(); btn.__mbcElvSkin = true
-                    end
-                    if btn.backdrop then btn.backdrop:Show() end
-                end)
-            else
-                actionBarSkin(btn, nil)
-            end
-        end
-        return
-    end
+    if not icon then return end
     local skin = chosenSkin()
     clearSkinState(btn, skin)
     if skin == "masque" then
@@ -537,10 +527,9 @@ StaticPopupDialogs["MINIMAPICONBAR_RELOAD_LANDINGPAGE"] = {
 -- ===========================================================================
 -- Lock owning addon out of moving / reparenting / resizing
 -- ===========================================================================
--- Handlers/sentinels shared by every locked button, so locking allocates no
--- per-button closures. The hooks key off the passed frame (self), not a
--- captured upvalue, so one function serves all buttons.
-local function noop() end
+-- Handlers shared by every locked button, so locking allocates no per-button
+-- closures. The hooks key off the passed frame (self), not a captured upvalue,
+-- so one function serves all buttons. (noop is defined up in Helpers.)
 local function btnOnHide(self)
     if internalToggle or dragBtn == self then return end
     if not self.__mbcOwnerHidden then self.__mbcOwnerHidden = true; requestRelayout() end
@@ -785,21 +774,20 @@ end
 -- Collection
 -- ===========================================================================
 -- Blizzard's expansion landing-page button (the Omnium Folio / renown button in
--- 12.0.7) doesn't fit the de-circle-and-reskin pipeline: its art is a composite,
--- state-dependent atlas that blanks when stripped. So we keep its native art and
--- make it a normal bar member instead. That takes a few Blizzard-specific
--- fixups, each of which was a distinct symptom:
+-- 12.0.7) doesn't fit the de-circle-and-reskin pipeline: its art is a dynamic,
+-- multi-layer, state-dependent atlas no skin can crop. So we hide the native art
+-- and draw our own icon - a silver frame (LANDINGPAGE_FRAME, the managed icon, so
+-- every skin frames/scales it) plus a grayscale orb (LANDINGPAGE_ORB) tinted to
+-- the player's class colour. The rest are Blizzard-specific fixups, each a
+-- distinct symptom:
 --   * reparent onto the bar - it sits at LOW strata under MinimapCluster, which
 --     a child can't escape, so it always drew behind the MEDIUM bar icons;
 --   * SetIgnoreParentScale(false) + match a sibling's scale - Blizzard has it
 --     ignore parent scale, so it rendered huge and mis-placed (anchor offsets
 --     are in the frame's own scaled units);
---   * pin oversized textures to the frame - its art is drawn larger than the
---     frame and overhangs onto the neighbours;
 --   * lockButton - drag-to-reorder + lock SetPoint/SetParent/SetSize/SetScale/
 --     ClearAllPoints/SetIgnoreParentScale so Blizzard can't undo any of it.
--- __mbcLandingPage marks it so the prune/owner-hidden paths (which assume a
--- reparented, self-managed addon button) treat it correctly.
+-- __mbcLandingPage marks it for the prune/owner-hidden paths.
 local function collectLandingPageButton()
     if not db.collectLandingPage then return false end
     local btn = _G.ExpansionLandingPageMinimapButton
@@ -824,20 +812,38 @@ local function collectLandingPageButton()
     if btn.SetFrameStrata then btn:SetFrameStrata(bar:GetFrameStrata()) end
     if btn.SetFrameLevel then btn:SetFrameLevel((bar:GetFrameLevel() or 1) + 10) end
     setSize(btn, db.size or 32)   -- size the frame to the row
-    -- Blizzard draws this button's textures larger than its frame, so they
-    -- overhang the slot and cover the neighbours. Pin any oversized texture to
-    -- the frame so the art fits its slot too. SetAllPoints tracks the frame, so
-    -- this keeps working when the size slider changes the frame.
-    local bw = btn:GetWidth() or db.size or 32
+    -- Hide Blizzard's native art (a dynamic multi-layer atlas no skin can crop)
+    -- and draw our own two layers: a silver frame as the managed icon (so every
+    -- skin frames/scales it like a normal addon icon) and a grayscale orb behind
+    -- it, tinted to the player's class colour and anchored to the frame so it
+    -- tracks under any skin. SetTexCoord is no-op'd on the frame so a skin's
+    -- de-border crop can't shift it out of alignment with the orb (the icon is
+    -- self-framed; it needs no cropping).
     for i = 1, (btn.GetNumRegions and btn:GetNumRegions() or 0) do
         local r = select(i, btn:GetRegions())
-        if r and r.IsObjectType and r:IsObjectType("Texture")
-           and (r:GetWidth() or 0) > bw + 1 then
-            r:ClearAllPoints(); r:SetAllPoints(btn)
+        if r and r.IsObjectType and r:IsObjectType("Texture") and r.SetAlpha then
+            r:SetAlpha(0); r.SetAlpha = noop   -- keep the native art invisible
         end
     end
-    lockButton(btn)   -- drag-to-reorder + lock the move API (no strip/reskin)
-    applySkin(btn)    -- backdrop behind the native art
+    if not btn.__mbcLPIcon then
+        btn.__mbcLPIcon = btn:CreateTexture(nil, "ARTWORK")
+        btn.__mbcLPIcon.SetTexCoord = noop     -- keep it uncropped (aligns with the orb)
+    end
+    btn.__mbcLPIcon:SetTexture(LANDINGPAGE_FRAME)
+    btn.__mbcLPIcon:Show()
+    btn.__mbcIcon = btn.__mbcLPIcon            -- the frame is the skinned icon
+    if not btn.__mbcLPOrb then
+        btn.__mbcLPOrb = btn:CreateTexture(nil, "ARTWORK", nil, -2)
+        btn.__mbcLPOrb.Hide = noop             -- a skin must not hide our orb layer
+    end
+    btn.__mbcLPOrb:SetTexture(LANDINGPAGE_ORB)
+    btn.__mbcLPOrb:SetAllPoints(btn.__mbcLPIcon)   -- track the frame under any skin
+    local _, class = UnitClass("player")
+    local col = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+    if col then btn.__mbcLPOrb:SetVertexColor(col.r, col.g, col.b) end
+    btn.__mbcLPOrb:Show()
+    lockButton(btn)   -- drag-to-reorder + lock the move API
+    applySkin(btn)
     return true
 end
 
