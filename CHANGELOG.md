@@ -10,6 +10,14 @@
   minimap after a UI reload.
 - **Supports game version 12.1.0** and 12.0.7; the
   12.0.5 interface is dropped now that 12.0.7 is live.
+- **No idle CPU**: the background button-scan poll now stops itself once
+  the minimap settles and only re-arms on events that can add a button
+  (zoning, an addon loading, a new LibDBIcon, leaving combat). A quiet
+  session does no polling at all; a scan still runs the moment the button
+  set actually changes. (`/mib cleanup` forces a rescan any time.)
+- **Lower memory churn**: re-flowing the bar and locking buttons reuse
+  shared tables and handler functions instead of allocating on every call
+  and every button.
 
 ## v1.1.0
 

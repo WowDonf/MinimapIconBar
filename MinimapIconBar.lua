@@ -141,10 +141,11 @@ local internalToggle = false   -- true while WE show/hide buttons (vs the owner)
 local layout                   -- forward declaration (used by the hide/show hooks)
 local applyOrder, captureOrder, reorderEnabled, onBtnDragStart, onBtnDragStop
 local relayoutPending = false
+local function runRelayout() relayoutPending = false; if layout then layout() end end
 local function requestRelayout()
     if relayoutPending then return end
     relayoutPending = true
-    C_Timer.After(0, function() relayoutPending = false; if layout then layout() end end)
+    C_Timer.After(0, runRelayout)   -- reuse one callback instead of a fresh closure
 end
 
 -- While reordering, the grabbed icon follows the cursor.
@@ -536,13 +537,27 @@ StaticPopupDialogs["MINIMAPICONBAR_RELOAD_LANDINGPAGE"] = {
 -- ===========================================================================
 -- Lock owning addon out of moving / reparenting / resizing
 -- ===========================================================================
+-- Handlers/sentinels shared by every locked button, so locking allocates no
+-- per-button closures. The hooks key off the passed frame (self), not a
+-- captured upvalue, so one function serves all buttons.
+local function noop() end
+local function btnOnHide(self)
+    if internalToggle or dragBtn == self then return end
+    if not self.__mbcOwnerHidden then self.__mbcOwnerHidden = true; requestRelayout() end
+end
+local function btnOnShow(self)
+    if internalToggle or dragBtn == self then return end
+    if self.__mbcOwnerHidden then self.__mbcOwnerHidden = false; requestRelayout() end
+end
+local function btnOnDragStart(self) if onBtnDragStart then onBtnDragStart(self) end end
+local function btnOnDragStop(self)  if onBtnDragStop  then onBtnDragStop(self)  end end
+
 local function lockButton(btn)
     if btn.__mbcLocked then return end
     btn.__mbcLocked = true
     btn.__mbcOrigSetPoint  = btn.SetPoint
     btn.__mbcOrigSetParent = btn.SetParent
     btn.__mbcOrigSetSize   = btn.SetSize
-    local noop = function() end
     btn.SetPoint, btn.SetParent, btn.SetSize = noop, noop, noop
     -- The landing-page button re-runs its own ClearAllPoints+SetPoint on events;
     -- with SetPoint noop'd, an open ClearAllPoints would strip our anchor and
@@ -560,14 +575,8 @@ local function lockButton(btn)
     -- Track when the owning addon hides/shows its own button (e.g. you toggle it
     -- off in that addon's settings) so we can drop it from the row. Our own
     -- open/close toggling is wrapped in internalToggle and ignored here.
-    hooksecurefunc(btn, "Hide", function()
-        if internalToggle or dragBtn == btn then return end
-        if not btn.__mbcOwnerHidden then btn.__mbcOwnerHidden = true; requestRelayout() end
-    end)
-    hooksecurefunc(btn, "Show", function()
-        if internalToggle or dragBtn == btn then return end
-        if btn.__mbcOwnerHidden then btn.__mbcOwnerHidden = false; requestRelayout() end
-    end)
+    hooksecurefunc(btn, "Hide", btnOnHide)
+    hooksecurefunc(btn, "Show", btnOnShow)
     btn.__mbcOwnerHidden = (not btn:IsShown()) and true or nil
 
     -- Drag-to-reorder (active only when the bar is unlocked). A click still
@@ -575,8 +584,8 @@ local function lockButton(btn)
     -- drag scripts entirely (SetScript, not hook) so the owning addon's own
     -- drag/reposition routine can't run and fight us.
     btn:RegisterForDrag("LeftButton")
-    btn:SetScript("OnDragStart", function(self) if onBtnDragStart then onBtnDragStart(self) end end)
-    btn:SetScript("OnDragStop",  function(self) if onBtnDragStop  then onBtnDragStop(self)  end end)
+    btn:SetScript("OnDragStart", btnOnDragStart)
+    btn:SetScript("OnDragStop",  btnOnDragStop)
 end
 
 -- ===========================================================================
@@ -602,23 +611,29 @@ local function anchorBar()
     bar:SetPoint(growthAnchorCorner(), UIParent, "CENTER", (db.x or 0) / s, (db.y or 0) / s)
 end
 
+-- A button is a visible row member unless its owning addon hid it. The
+-- landing-page button is Blizzard-managed and briefly hides itself during its
+-- own updates, so it's always treated as a member (otherwise layout would skip
+-- placing it and strand it on top of the row).
+local function lpShown(b) return b.__mbcLandingPage or not b.__mbcOwnerHidden end
+
+-- Reused on every layout() so re-flowing the bar allocates no garbage.
+local layoutItems = {}
+
 function layout()
     if not bar then return end
 
-    -- The landing-page button is Blizzard-managed and briefly hides itself during
-    -- its own updates, which would flag it "owner-hidden" and make layout skip
-    -- placing it (stranding it at a stale spot on top of the row). It's always a
-    -- member while collected, so ignore owner-hidden for it.
-    local function shown(b) return b.__mbcLandingPage or not b.__mbcOwnerHidden end
-    local items = { toggle }
+    local items = layoutItems
+    wipe(items)
+    items[1] = toggle
     if db.isOpen then
         for _, b in ipairs(collected) do
-            if shown(b) then items[#items + 1] = b end
+            if lpShown(b) then items[#items + 1] = b end
         end
     end
     internalToggle = true
     for _, b in ipairs(collected) do
-        if db.isOpen and shown(b) then b:Show() else b:Hide() end
+        if db.isOpen and lpShown(b) then b:Show() else b:Hide() end
     end
     internalToggle = false
 
@@ -854,28 +869,50 @@ local function scanMinimap()
     return found
 end
 
+-- A collected button is still valid if it's a live frame on the bar. The
+-- landing-page button is kept on its own (native) parent, so it's valid even
+-- though its parent isn't `bar`.
+local function stillCollectable(b)
+    return type(b) == "table" and b.IsObjectType and b:IsObjectType("Frame")
+        and (b.__mbcLandingPage or (b.GetParent and b:GetParent() == bar))
+end
+
 -- Drop buttons that have gone away (frame destroyed, or an addon reparented it
 -- back off our bar) and compact the list so no empty slot is left behind.
 -- Returns the number removed.
 local function pruneCollected()
+    -- Fast path: when every button is still valid (the usual case) we allocate
+    -- nothing and return immediately.
+    local anyInvalid = false
+    for _, b in ipairs(collected) do
+        if not stillCollectable(b) then anyInvalid = true; break end
+    end
+    if not anyInvalid then return 0 end
+
     local kept, removed = {}, 0
     for _, b in ipairs(collected) do
-        local valid = type(b) == "table" and b.IsObjectType and b:IsObjectType("Frame")
-            -- The landing-page button is anchored to the bar but kept on its own
-            -- (native) parent, so it's valid even though its parent isn't `bar`.
-            and (b.__mbcLandingPage or (b.GetParent and b:GetParent() == bar))
-        if valid then
+        if stillCollectable(b) then
             kept[#kept + 1] = b
         else
             removed = removed + 1
             if b then isCollected[b] = nil end
         end
     end
-    if removed > 0 then
-        wipe(collected)
-        for i, b in ipairs(kept) do collected[i] = b end
-    end
+    wipe(collected)
+    for i, b in ipairs(kept) do collected[i] = b end
     return removed
+end
+
+-- Cheap signal for "did the minimap's button set change?" - the polling ticker
+-- compares this and skips the (more expensive) prune+scan when it's unchanged,
+-- so idle CPU stays near zero.
+local lastChildCount = -1
+local function minimapChildCount()
+    local n = (Minimap and Minimap.GetNumChildren and Minimap:GetNumChildren()) or 0
+    if MinimapBackdrop and MinimapBackdrop.GetNumChildren then
+        n = n + MinimapBackdrop:GetNumChildren()
+    end
+    return n
 end
 
 -- Full cleanup: pick up new buttons, drop removed ones, re-flow the bar.
@@ -884,30 +921,46 @@ local function refreshBar()
     local removed = pruneCollected()
     local found   = scanMinimap()   -- lays out if it added anything
     if removed > 0 and not found then layout() end
+    lastChildCount = minimapChildCount()   -- keep the ticker's gate in sync
     return found, removed
 end
 
--- Watch for buttons appearing/disappearing while playing (e.g. enabling an
--- addon) and refresh automatically. Cheap: scanMinimap skips already-collected
--- buttons, so a tick only does real work when something actually changed.
+-- Watch for buttons appearing/disappearing while playing and refresh the bar.
+-- The poll is self-limiting: an idle tick is just a child-count compare, and
+-- after STABLE_LIMIT ticks with no change it cancels itself, so a quiet session
+-- costs no CPU at all. Anything that can add a button (zoning, an addon loading,
+-- a LibDBIcon appearing, leaving combat) re-arms it via armRefresh().
 local refreshTicker
-local function startAutoRefresh()
-    if refreshTicker then return end
-    -- Polling backstop, 5s: catches buttons from addons that build their frame
-    -- on toggle (not just at load). The common case (LibDBIcon) is picked up
-    -- instantly by the callback below, so this only covers rare non-LDB addons.
+local stableTicks  = 0
+local STABLE_LIMIT = 6   -- stop the poll after ~30s with no change
+
+local function armRefresh()
+    stableTicks = 0
+    if refreshTicker then return end   -- already polling (counter reset above)
     refreshTicker = C_Timer.NewTicker(5, function()
         if InCombatLockdown and InCombatLockdown() then return end
+        if minimapChildCount() == lastChildCount then
+            stableTicks = stableTicks + 1
+            if stableTicks >= STABLE_LIMIT and refreshTicker then
+                refreshTicker:Cancel(); refreshTicker = nil   -- idle: stop polling
+            end
+            return
+        end
+        stableTicks = 0
         refreshBar()
     end)
+end
 
-    -- Fast path: LibDBIcon fires this the instant it creates a button, including
-    -- when you enable a previously-hidden icon in its owning addon's options.
+-- Register the LibDBIcon fast path once: it fires the instant an icon is created
+-- (including when you enable a hidden one in its addon's options).
+local function hookLDBIcon()
     local LDBIcon = LibStub and LibStub("LibDBIcon-1.0", true)
     if LDBIcon and LDBIcon.RegisterCallback then
         LDBIcon.RegisterCallback({}, "LibDBIcon_IconCreated", function()
             C_Timer.After(0, function()
-                if not (InCombatLockdown and InCombatLockdown()) then refreshBar() end
+                if not (InCombatLockdown and InCombatLockdown()) then
+                    refreshBar(); armRefresh()
+                end
             end)
         end)
     end
@@ -1579,6 +1632,11 @@ boot:SetScript("OnEvent", function(_, event)
             scanMinimap()
             layout()
         end
+        armRefresh()   -- buttons may have been created during combat
+        return
+    end
+    if event == "PLAYER_ENTERING_WORLD" or event == "ADDON_LOADED" then
+        armRefresh()   -- a zone change or an addon loading can add buttons
         return
     end
 
@@ -1615,14 +1673,18 @@ boot:SetScript("OnEvent", function(_, event)
     buildProfileConfig()
     applyAll()
 
-    -- Pick up buttons deferred because we were in combat at the time.
+    -- Pick up buttons deferred because we were in combat at the time, and re-arm
+    -- the poll on zone changes / addon loads (these can add minimap buttons).
     boot:RegisterEvent("PLAYER_REGEN_ENABLED")
+    boot:RegisterEvent("PLAYER_ENTERING_WORLD")
+    boot:RegisterEvent("ADDON_LOADED")
 
     scanMinimap()
     for _, delay in ipairs({ 1, 3, 6, 10 }) do
         C_Timer.After(delay, function() scanMinimap(); layout() end)
     end
-    startAutoRefresh()
+    hookLDBIcon()
+    armRefresh()
 
     local skin = chosenSkin()
     local skinText = (skin == "masque" and " (Masque)")
