@@ -206,6 +206,13 @@ end
 local function noop() end   -- shared no-op used to neutralize locked APIs
 local function setSize(frame, s)  (frame.__mbcOrigSetSize  or frame.SetSize )(frame, s, s) end
 local function setPoint(frame, ...) (frame.__mbcOrigSetPoint or frame.SetPoint)(frame, ...) end
+-- Show/Hide through the originals when we've locked a frame's own Show/Hide (the
+-- landing-page button, whose Blizzard updates would otherwise pulse its
+-- visibility and churn a relayout every frame).
+local function setShown(frame, shown)
+    if shown then (frame.__mbcOrigShow or frame.Show)(frame)
+    else (frame.__mbcOrigHide or frame.Hide)(frame) end
+end
 
 local function looksLikeBorder(texStr)
     if not texStr or texStr == "" then return false end
@@ -559,14 +566,23 @@ local function lockButton(btn)
     -- Block the standard move API so an owning addon's own drag can never shift
     -- the button (our reorder moves it via the saved original SetPoint instead).
     if btn.StartMoving then btn.StartMoving = noop end
-    if btn.StopMovingOrSizing then btn.__mbcOrigStopMoving = btn.StopMovingOrSizing; btn.StopMovingOrSizing = noop end
+    if btn.StopMovingOrSizing then btn.StopMovingOrSizing = noop end
 
-    -- Track when the owning addon hides/shows its own button (e.g. you toggle it
-    -- off in that addon's settings) so we can drop it from the row. Our own
-    -- open/close toggling is wrapped in internalToggle and ignored here.
-    hooksecurefunc(btn, "Hide", btnOnHide)
-    hooksecurefunc(btn, "Show", btnOnShow)
-    btn.__mbcOwnerHidden = (not btn:IsShown()) and true or nil
+    if btn.__mbcLandingPage then
+        -- Blizzard pulses this button's own Show/Hide on its updates; left hooked,
+        -- each toggle would fire a relayout every frame and burn idle CPU. Take its
+        -- visibility over entirely - block Blizzard's Show/Hide and drive it through
+        -- setShown (in layout) - so it never churns and can't linger on a closed bar.
+        btn.__mbcOrigShow, btn.__mbcOrigHide = btn.Show, btn.Hide
+        btn.Show, btn.Hide = noop, noop
+    else
+        -- Track when the owning addon hides/shows its own button (e.g. you toggle it
+        -- off in that addon's settings) so we can drop it from the row. Our own
+        -- open/close toggling is wrapped in internalToggle and ignored here.
+        hooksecurefunc(btn, "Hide", btnOnHide)
+        hooksecurefunc(btn, "Show", btnOnShow)
+        btn.__mbcOwnerHidden = (not btn:IsShown()) and true or nil
+    end
 
     -- Drag-to-reorder (active only when the bar is unlocked). A click still
     -- works normally; only a press-and-drag triggers a reorder. We take over the
@@ -622,7 +638,7 @@ function layout()
     end
     internalToggle = true
     for _, b in ipairs(collected) do
-        if db.isOpen and lpShown(b) then b:Show() else b:Hide() end
+        setShown(b, db.isOpen and lpShown(b))
     end
     internalToggle = false
 
@@ -786,7 +802,9 @@ end
 --     ignore parent scale, so it rendered huge and mis-placed (anchor offsets
 --     are in the frame's own scaled units);
 --   * lockButton - drag-to-reorder + lock SetPoint/SetParent/SetSize/SetScale/
---     ClearAllPoints/SetIgnoreParentScale so Blizzard can't undo any of it.
+--     ClearAllPoints/SetIgnoreParentScale, plus Show/Hide (Blizzard pulses its
+--     visibility, which would otherwise churn a relayout every frame), so
+--     Blizzard can't undo any of it.
 -- __mbcLandingPage marks it for the prune/owner-hidden paths.
 local function collectLandingPageButton()
     if not db.collectLandingPage then return false end
@@ -821,8 +839,9 @@ local function collectLandingPageButton()
     -- self-framed; it needs no cropping).
     for i = 1, (btn.GetNumRegions and btn:GetNumRegions() or 0) do
         local r = select(i, btn:GetRegions())
-        if r and r.IsObjectType and r:IsObjectType("Texture") and r.SetAlpha then
-            r:SetAlpha(0); r.SetAlpha = noop   -- keep the native art invisible
+        if r and r.IsObjectType and r:IsObjectType("Texture") and r.SetAlpha
+           and (r:GetTexture() or (r.GetAtlas and r:GetAtlas())) then
+            r:SetAlpha(0); r.SetAlpha = noop   -- pin only the regions actually drawing art
         end
     end
     if not btn.__mbcLPIcon then
@@ -852,11 +871,11 @@ local function scanMinimap()
     -- defer collection until combat ends (PLAYER_REGEN_ENABLED runs it then).
     if InCombatLockdown and InCombatLockdown() then
         pendingScan = true
-        return false
+        return 0
     end
     local containers = { Minimap }
     if MinimapBackdrop then containers[#containers + 1] = MinimapBackdrop end
-    local found = false
+    local added = 0
     for _, container in ipairs(containers) do
         local children = { container:GetChildren() }
         for _, child in ipairs(children) do
@@ -866,18 +885,19 @@ local function scanMinimap()
                 squareButton(child)
                 child:SetParent(bar)
                 lockButton(child)
-                found = true
+                added = added + 1
             end
         end
     end
-    if collectLandingPageButton() then found = true end
-    if found then applyOrder(); layout() end
-    return found
+    if collectLandingPageButton() then added = added + 1 end
+    if added > 0 then applyOrder(); layout() end
+    return added
 end
 
--- A collected button is still valid if it's a live frame on the bar. The
--- landing-page button is kept on its own (native) parent, so it's valid even
--- though its parent isn't `bar`.
+-- A collected button is still valid if it's a live frame parented to the bar.
+-- The landing-page button is reparented onto the bar too (and its SetParent is
+-- locked), but flag it explicitly as well so a stray Blizzard reparent can't
+-- silently drop it from the row.
 local function stillCollectable(b)
     return type(b) == "table" and b.IsObjectType and b:IsObjectType("Frame")
         and (b.__mbcLandingPage or (b.GetParent and b:GetParent() == bar))
@@ -925,10 +945,10 @@ end
 -- Returns added, removed counts.
 local function refreshBar()
     local removed = pruneCollected()
-    local found   = scanMinimap()   -- lays out if it added anything
-    if removed > 0 and not found then layout() end
+    local added   = scanMinimap()   -- lays out if it added anything
+    if removed > 0 and added == 0 then layout() end
     lastChildCount = minimapChildCount()   -- keep the ticker's gate in sync
-    return found, removed
+    return added, removed
 end
 
 -- Watch for buttons appearing/disappearing while playing and refresh the bar.
@@ -1099,8 +1119,7 @@ local function deleteProfile(name)
         if p == name then store.chars[c] = nil end
     end
     if activeProfile == name then
-        local fallback
-        for n in pairs(store.profiles) do fallback = n; break end
+        local fallback = next(store.profiles)   -- any remaining profile, else this char's
         activateProfile(fallback or charKey)
     elseif configProfiles and configProfiles.Refresh then
         configProfiles.Refresh()
@@ -1299,9 +1318,9 @@ local function buildConfig()
     rescan:SetPoint("TOPLEFT", 24, -484)
     rescan:SetText("Clean up")
     rescan:SetScript("OnClick", function()
-        local found, removed = refreshBar()
-        if found or removed > 0 then
-            msg(("cleaned up (%s added, %d removed)."):format(found and "new" or "0", removed))
+        local added, removed = refreshBar()
+        if added > 0 or removed > 0 then
+            msg(("cleaned up (%d added, %d removed)."):format(added, removed))
         else
             msg("nothing to clean up.")
         end
@@ -1472,8 +1491,12 @@ SlashCmdList["MINIMAPICONBAR"] = function(input)
     elseif cmd == "toggle" then
         toggleOpen()
     elseif cmd == "rescan" or cmd == "cleanup" then
-        local found, removed = refreshBar()
-        msg(("cleaned up (%s added, %d removed)."):format(found and "new" or "0", removed))
+        local added, removed = refreshBar()
+        if added > 0 or removed > 0 then
+            msg(("cleaned up (%d added, %d removed)."):format(added, removed))
+        else
+            msg("nothing to clean up.")
+        end
     elseif cmd == "reset" then
         resetSettings()
     elseif cmd == "lock" then
@@ -1563,12 +1586,12 @@ SlashCmdList["MINIMAPICONBAR"] = function(input)
         else print("Usage: /mib scale 1.0") end
     elseif cmd == "size" then
         local v = tonumber(arg)
-        if v then db.size = math.max(12, math.min(64, math.floor(v))); resizeAll(); layout()
+        if v then db.size = math.max(16, math.min(48, math.floor(v))); resizeAll(); layout()
             msg("button size = " .. db.size .. " px")
         else print("Usage: /mib size 32") end
     elseif cmd == "spacing" then
         local v = tonumber(arg)
-        if v then db.spacing = math.max(0, math.min(32, math.floor(v * 2 + 0.5) / 2)); layout()
+        if v then db.spacing = math.max(0, math.min(16, math.floor(v * 2 + 0.5) / 2)); layout()
             msg("spacing = " .. db.spacing .. " px")
         else print("Usage: /mib spacing 0.5") end
     elseif cmd == "perrow" then
@@ -1601,7 +1624,7 @@ end
 -- ===========================================================================
 -- Addon Compartment (the dropdown by the minimap clock)
 -- ===========================================================================
-function MinimapIconBarCompartmentOnClick(addonName, arg2, arg3)
+function MinimapIconBarCompartmentOnClick(_, arg2, arg3)
     local mb = arg2
     if mb ~= "LeftButton" and mb ~= "RightButton" then
         mb = (arg3 == "LeftButton" or arg3 == "RightButton") and arg3 or "LeftButton"
@@ -1613,7 +1636,7 @@ function MinimapIconBarCompartmentOnClick(addonName, arg2, arg3)
     end
 end
 
-function MinimapIconBarCompartmentOnEnter(addonName, menuButton)
+function MinimapIconBarCompartmentOnEnter(_, menuButton)
     local owner = (type(menuButton) == "table" and menuButton) or _G.AddonCompartmentFrame or UIParent
     GameTooltip:SetOwner(owner, "ANCHOR_LEFT")
     GameTooltip:AddLine("Minimap Icon Bar")
