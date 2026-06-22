@@ -2,7 +2,7 @@
 ## Title: Minimap Icon Bar
 ## Notes: Collects your minimap buttons (and optionally the Omnium Folio button) into one movable, action-bar-style icon bar. Masque/ElvUI aware.
 ## Author: WowDonf
-## Version: v1.2.0
+## Version: v1.2.1
 ## SavedVariables: MinimapIconBarDB
 ## OptionalDeps: Masque, ElvUI
 ## IconTexture: Interface\AddOns\MinimapIconBar\logo

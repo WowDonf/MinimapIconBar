@@ -810,6 +810,13 @@ local function collectLandingPageButton()
     if not db.collectLandingPage then return false end
     local btn = _G.ExpansionLandingPageMinimapButton
     if not btn or btn == toggle or btn == bar or isCollected[btn] then return false end
+    -- Only adopt it when Blizzard is actually showing it - i.e. the expansion
+    -- feature is available for this character. When it's unavailable (e.g. a
+    -- low-level alt) Blizzard keeps the button hidden and never fills in its
+    -- tooltip data; forcing it visible on the bar would let the player hover it
+    -- and trip Blizzard's own SetTooltip on an empty button (a SetText(nil)
+    -- error). A later scan / reload grabs it if it becomes available.
+    if btn.IsShown and not btn:IsShown() then return false end
     isCollected[btn] = true
     collected[#collected + 1] = btn
     btn.__mbcLandingPage = true

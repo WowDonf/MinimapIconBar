@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.1
+
+- **Fixed**: with the Omnium Folio option on, the expansion landing-page
+  button is no longer pulled onto the bar on characters where the feature
+  is unavailable (e.g. low-level alts). Forcing the otherwise-hidden button
+  visible there let Blizzard's tooltip code run on an empty button and throw
+  an error on hover; it's now collected only when it's actually available.
+
 ## v1.2.0
 
 - **Optionally collect the expansion landing-page button** (the 12.0.7
