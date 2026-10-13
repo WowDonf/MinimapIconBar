@@ -18,8 +18,8 @@ whole bar. The row grows in whichever direction you choose, and the M
 stays put as it grows or shrinks.
 
 Each button is de-circled and shown in a stock WoW action-bar slot by
-default, or skinned by **Masque** or **ElvUI** if you have either
-installed (selectable per profile). Newly enabled addon buttons are
+default, or skinned by **Masque**, **ElvUI**, or **EllesmereUI** if you
+have one installed (selectable per profile). Newly enabled addon buttons are
 picked up automatically.
 
 ## Features
@@ -27,8 +27,10 @@ picked up automatically.
 - **One-click collect/expand** from a movable toggle button; the row
   hides when collapsed so the minimap stays clear.
 - **Action-bar look** by default — round minimap borders are stripped and
-  the icon is squared into a HUD slot. **Masque** and **ElvUI** skinning
-  supported and selectable per profile.
+  the icon is squared into a HUD slot. **Masque**, **ElvUI**, and
+  **EllesmereUI** skinning supported and selectable per profile. The
+  EllesmereUI skin follows your Action Bar 1 style live: slot fill, icon
+  zoom, border style and colour, and button shape (circle, hexagon, ...).
 - **Fully configurable layout**: button size, spacing, whole-bar scale,
   buttons-per-row, and growth direction (right/left × up/down).
 - **Drag-to-reorder**: unlock the bar and drag icons to rearrange them;
@@ -73,7 +75,7 @@ Click the **M** button (or type `/mib`) to get started.
 | `/mib perrow N` | buttons per row, 1 – 12 (incl. the M icon) |
 | `/mib growth DIR` | `down_right` \| `down_left` \| `up_right` \| `up_left` |
 | `/mib move unlocked\|locked` | movement mode |
-| `/mib skin auto\|default\|elvui\|masque` | skin profile |
+| `/mib skin auto\|default\|elvui\|masque\|ellesmere` | skin profile |
 | `/mib profile set\|new\|copy\|delete NAME` | manage profiles (`list` to list) |
 | `/mib cleanup` | rescan for added/removed buttons |
 | `/mib reset` | reset settings to defaults |
@@ -81,9 +83,13 @@ Click the **M** button (or type `/mib`) to get started.
 
 ## Compatibility
 
-- WoW Midnight (Interface 120005, patch 12.x)
-- No required dependencies. **Masque** and **ElvUI** are optional and
-  used only for skinning if present.
+- WoW Midnight (Interface 120100 and 120105, patches 12.1.0 and 12.1.5)
+- No required dependencies. **Masque**, **ElvUI**, and **EllesmereUI** are
+  optional and used only for skinning if present.
+- **EllesmereUI's Minimap module is not compatible.** That module is its
+  own minimap controller and takes over the minimap buttons, so Minimap Icon
+  Bar disables itself (with a notice) while it's loaded. Turn off just that
+  module and the addon works alongside the rest of EllesmereUI.
 - Collection that reparents a frame is deferred out of combat to avoid
   protected-frame taint.
 

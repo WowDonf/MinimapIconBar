@@ -8,7 +8,7 @@
       right-click for options). The row grows in the direction you choose and the
       toggle stays put.
     * Buttons are de-circled and shown in a stock action-bar slot by default, or
-      skinned by Masque or ElvUI if you have them (selectable per profile).
+      skinned by Masque, ElvUI, or EllesmereUI if you have them (selectable per profile).
     * Button size, spacing, scale, and buttons-per-row are all configurable.
     * Per-character profiles, with named profiles you can share across alts.
 
@@ -29,19 +29,20 @@ local DEFAULTS = {
     isOpen        = false,
     lockMode      = "unlocked",          -- "unlocked" | "locked"
     lockedOpen    = false,               -- open/closed state captured when locked
-    skinStyle     = "auto",              -- "auto" | "default" | "elvui" | "masque"
+    skinStyle     = "auto",              -- "auto" | "default" | "elvui" | "masque" | "ellesmere"
     order         = {},                  -- saved icon order (list of button names)
     collectLandingPage = false,          -- opt-in: also grab Blizzard's expansion
                                          -- landing-page button (the Omnium Folio /
                                          -- renown button), normally left in place
 }
 
-local SKIN_ORDER = { "auto", "default", "elvui", "masque" }
+local SKIN_ORDER = { "auto", "default", "elvui", "masque", "ellesmere" }
 local SKIN_TEXT  = {
-    auto    = "Automatic (Masque/ElvUI if present)",
-    default = "Default WoW action bar",
-    elvui   = "ElvUI",
-    masque  = "Masque",
+    auto      = "Automatic (Masque/ElvUI/EllesmereUI if present)",
+    default   = "Default WoW action bar",
+    elvui     = "ElvUI",
+    masque    = "Masque",
+    ellesmere = "EllesmereUI action bar",
 }
 
 local LOCK_ORDER = { "unlocked", "locked" }
@@ -170,6 +171,37 @@ end)
 
 local PREFIX = "|cff66ccffMinimap Icon Bar|r"
 local function msg(s) print(PREFIX .. ": " .. s) end
+
+-- ===========================================================================
+-- EllesmereUI Minimap module
+-- ===========================================================================
+-- EllesmereUI's Minimap module (the separate "EllesmereUI Minimap" addon) is
+-- its own minimap controller: it sweeps minimap buttons into its flyout and
+-- pins Blizzard's landing-page button, fighting any collector for them. The
+-- rest of EllesmereUI is fine (there's even an EllesmereUI skin below), so the
+-- addon stands down only while that module is loaded: no frames, no
+-- collection, no options entry - just a notice at login (and from /mib and
+-- the addon-compartment entry). EllesmereUI's module power buttons disable
+-- the module's addon entry and reload, so "loaded" is the right test.
+local ELLESMERE_MINIMAP = "EllesmereUIMinimap"
+local disabledByEllesmere = false
+local ELLESMERE_NOTICE = "|cffff4040not compatible with EllesmereUI's Minimap module|r - that"
+    .. " module is its own minimap controller and conflicts with this addon, so Minimap Icon Bar"
+    .. " is disabled while it's loaded. Turn off the \"EllesmereUI Minimap\" module (EllesmereUI's"
+    .. " module power button, or the AddOns list) to use Minimap Icon Bar; the rest of EllesmereUI"
+    .. " works fine alongside it."
+
+local function ellesmereMinimapLoaded()
+    local isLoaded = (_G.C_AddOns and _G.C_AddOns.IsAddOnLoaded) or _G.IsAddOnLoaded
+    if isLoaded then
+        local ok, loaded = pcall(isLoaded, ELLESMERE_MINIMAP)
+        if ok then return loaded and true or false end
+    end
+    -- No addon API: fall back to the module's own registration with its core.
+    local core = _G.EllesmereUI
+    local reg = type(core) == "table" and core._ModuleNS
+    return type(reg) == "table" and reg[ELLESMERE_MINIMAP] ~= nil
+end
 
 -- ===========================================================================
 -- Blizzard Settings panel open / close
@@ -345,6 +377,272 @@ end
 -- Strip round border, square the icon (or hand to Masque)
 -- ===========================================================================
 
+-- ===========================================================================
+-- EllesmereUI action-bar skin
+-- ===========================================================================
+-- Mirrors EllesmereUI's main action bar ("Action Bar 1"): its flat slot fill,
+-- icon zoom, and either its square border (pixel-perfect solid, textured, or
+-- LibSharedMedia) or one of its masked button shapes with the matching shape
+-- border. Nothing about the look is fixed here - it's all read from
+-- EllesmereUI at skin time:
+--   * the settings come from the action-bar module's active profile;
+--   * shape masks, shape borders and their per-shape metrics come from the
+--     module's published namespace (EllesmereUI._ModuleNS), so a shape that a
+--     later EllesmereUI release adds or retunes is picked up as-is. Only when
+--     that namespace is missing do we fall back to its media naming convention
+--     and generic metrics;
+--   * square borders are drawn by EllesmereUI's own border helper on a child
+--     frame we own, so every border style it offers matches exactly.
+-- hookEllesmere (below reskinAll) re-skins the bar whenever the player changes
+-- those settings, so the bar follows them live.
+local EUI_MEDIA     = "Interface\\AddOns\\EllesmereUI\\media\\portraits\\"
+local EUI_FILL      = { r = 0.15, g = 0.15, b = 0.15 }   -- module default slot fill
+local EUI_BLACK     = { r = 0, g = 0, b = 0, a = 1 }
+local EUI_THICKNESS = {   -- fallback copy of the module's BORDER_THICKNESS
+    none   = { regular = 0, shape = 0 }, thin  = { regular = 1, shape = 0 },
+    normal = { regular = 2, shape = 0 }, heavy = { regular = 3, shape = 0 },
+    strong = { regular = 4, shape = 7 },
+}
+local EUIAB   -- EllesmereUI's action-bar module, resolved lazily
+
+local function euiTbl(t) return type(t) == "table" and t or nil end
+local function euiNum(v) return type(v) == "number" and v or nil end
+
+local function euiCore() return euiTbl(_G.EllesmereUI) end
+
+-- The action-bar module (its db carries the settings). Cached once found.
+local function euiActionBars()
+    if EUIAB then return EUIAB end
+    local core = euiCore()
+    local lite = core and euiTbl(core.Lite)
+    if not (lite and type(lite.GetAddon) == "function") then return nil end
+    local ok, mod = pcall(lite.GetAddon, "EllesmereUIActionBars", true)
+    if ok and type(mod) == "table" then EUIAB = mod end
+    return EUIAB
+end
+
+local function euiAvailable() return euiActionBars() ~= nil end
+
+-- The module's namespace: its shape tables and metrics, published for its
+-- own options UI to read.
+local function euiNS()
+    local core = euiCore()
+    local reg = core and euiTbl(core._ModuleNS)
+    return reg and euiTbl(reg.EllesmereUIActionBars) or nil
+end
+
+-- Read the main bar's style into one reused table (nil when EllesmereUI's
+-- settings aren't reachable). Follows the module's own resolution rules.
+local euiStyle = {}
+local function euiReadStyle()
+    local mod = euiActionBars()
+    local p = mod and euiTbl(mod.db) and euiTbl(mod.db.profile)
+    if not p then return nil end
+    local ns = euiNS()
+    local bars = euiTbl(p.bars)
+    local s = (bars and euiTbl(bars.MainBar)) or {}
+    local st = euiStyle
+
+    local fc = euiTbl(p.slotBgColor) or EUI_FILL
+    local fo = euiNum(p.slotBgOpacity) or 50
+    st.fillR, st.fillG, st.fillB = euiNum(fc.r) or 0.15, euiNum(fc.g) or 0.15, euiNum(fc.b) or 0.15
+    st.fillA = fo / 100
+
+    local shape = type(s.buttonShape) == "string" and s.buttonShape or "none"
+    local shaped = shape ~= "none" and shape ~= "cropped"
+    st.shape, st.shaped = shape, shaped
+    st.zoom = (euiNum(s.iconZoom) or euiNum(p.iconZoom) or 5.5) / 100
+
+    -- Border thickness: shapes use the "shape" column, with the per-bar
+    -- shapeBorderSize override on "thin" - the module's own rule.
+    local thickTable = (ns and euiTbl(ns.BORDER_THICKNESS)) or EUI_THICKNESS
+    local thick = type(s.borderThickness) == "string" and s.borderThickness or "thin"
+    local entry = euiTbl(thickTable[thick]) or euiTbl(thickTable.thin) or EUI_THICKNESS.thin
+    local size
+    if shaped then
+        local override = euiNum(s.shapeBorderSize)
+        if thick == "thin" and override and override ~= entry.shape then size = override
+        else size = entry.shape end
+    else
+        size = entry.regular
+    end
+    size = euiNum(size) or 0
+    st.thickness, st.borderSize, st.borderOn = thick, size, size > 0
+
+    local c = (shaped and euiTbl(s.shapeBorderColor)) or euiTbl(s.borderColor) or EUI_BLACK
+    local r, g, b, a = euiNum(c.r) or 0, euiNum(c.g) or 0, euiNum(c.b) or 0, euiNum(c.a) or 1
+    if s.borderClassColor then
+        local _, class = UnitClass("player")
+        local cc = class and RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+        if cc then r, g, b = cc.r, cc.g, cc.b end
+    end
+    st.r, st.g, st.b, st.a = r, g, b, a
+
+    st.texture = type(s.borderTexture) == "string" and s.borderTexture or "solid"
+    st.texOffX, st.texOffY = euiNum(s.borderTextureOffset), euiNum(s.borderTextureOffsetY)
+    st.shiftX,  st.shiftY  = euiNum(s.borderTextureShiftX),  euiNum(s.borderTextureShiftY)
+    st.behind = s.borderBehind and true or false
+
+    if shaped then
+        -- The module's tables first (every shape it knows, new ones included),
+        -- else its media naming convention with generic metrics.
+        local masks   = ns and euiTbl(ns.SHAPE_MASKS)
+        local borders = ns and euiTbl(ns.SHAPE_BORDERS)
+        local insets  = ns and euiTbl(ns.SHAPE_INSETS)
+        local offsets = ns and euiTbl(ns.SHAPE_ICON_EXPAND_OFFSETS)
+        local zooms   = ns and euiTbl(ns.SHAPE_ZOOM_DEFAULTS)
+        st.maskPath     = (masks and masks[shape]) or (EUI_MEDIA .. shape .. "_mask.tga")
+        st.borderPath   = (borders and borders[shape]) or (EUI_MEDIA .. shape .. "_border.tga")
+        st.inset        = euiNum(insets and insets[shape]) or 17
+        st.expandOffset = euiNum(offsets and offsets[shape]) or 0
+        st.zoomDefault  = (euiNum(zooms and zooms[shape]) or 6.0) / 100
+        st.expandBase   = euiNum(ns and ns.SHAPE_ICON_EXPAND) or 7
+    end
+    return st
+end
+
+-- Anchor through EllesmereUI's pixel-perfect helper when present, so edges
+-- land on the same physical pixels its own buttons do.
+local function euiPoint(obj, point, rel, relPoint, x, y)
+    local core = euiCore()
+    local PP = core and euiTbl(core.PP)
+    if PP and type(PP.Point) == "function" and pcall(PP.Point, obj, point, rel, relPoint, x, y) then return end
+    obj:SetPoint(point, rel, relPoint, x, y)
+end
+
+-- AddMaskTexture is additive, so track what carries our mask and never
+-- double-add; clearing removes exactly those.
+local function euiMask(btn, tex, mask)
+    if not (tex and tex.AddMaskTexture) then return end
+    local masked = btn.__mbcEuiMasked
+    if not masked then masked = {}; btn.__mbcEuiMasked = masked end
+    if masked[tex] then return end
+    if pcall(tex.AddMaskTexture, tex, mask) then masked[tex] = true end
+end
+
+local function euiClearShape(btn)
+    local mask, masked = btn.__mbcEuiMask, btn.__mbcEuiMasked
+    if mask and masked then
+        for tex in pairs(masked) do pcall(tex.RemoveMaskTexture, tex, mask); masked[tex] = nil end
+    end
+    if mask then mask:Hide() end
+    if btn.__mbcEuiShapeBorder then btn.__mbcEuiShapeBorder:Hide() end
+end
+
+-- Plain strips in the border colour: used only if EllesmereUI's border helper
+-- isn't available (its solid look, minus the pixel snapping).
+local function euiFallbackBorder(bf, st)
+    local strips = bf.__mbcStrips
+    if not strips then
+        strips = {}
+        for i = 1, 4 do strips[i] = bf:CreateTexture(nil, "OVERLAY", nil, 7) end
+        bf.__mbcStrips = strips
+    end
+    local sz = st.borderSize
+    local top, bottom, left, right = strips[1], strips[2], strips[3], strips[4]
+    top:ClearAllPoints();    top:SetPoint("TOPLEFT");       top:SetPoint("TOPRIGHT");      top:SetHeight(sz)
+    bottom:ClearAllPoints(); bottom:SetPoint("BOTTOMLEFT"); bottom:SetPoint("BOTTOMRIGHT"); bottom:SetHeight(sz)
+    left:ClearAllPoints();   left:SetPoint("TOPLEFT");      left:SetPoint("BOTTOMLEFT");    left:SetWidth(sz)
+    right:ClearAllPoints();  right:SetPoint("TOPRIGHT");    right:SetPoint("BOTTOMRIGHT");  right:SetWidth(sz)
+    for i = 1, 4 do strips[i]:SetColorTexture(st.r, st.g, st.b, st.a); strips[i]:Show() end
+end
+
+-- Square border on a child frame we own, drawn by EllesmereUI's helper (solid
+-- pixel-perfect, textured, or LibSharedMedia - whatever the bar uses).
+local function euiSquareBorder(btn, st)
+    local bf = btn.__mbcEuiBorder
+    if not bf then
+        bf = CreateFrame("Frame", nil, btn)
+        bf:SetAllPoints(btn)
+        btn.__mbcEuiBorder = bf
+    end
+    if not st.borderOn then bf:Hide(); return end
+    -- "Show behind" puts the border under the icon: one level below the button.
+    local lvl = (btn.GetFrameLevel and btn:GetFrameLevel()) or 1
+    bf:SetFrameLevel(math.max(0, lvl + (st.behind and -1 or 1)))
+    local core = euiCore()
+    local apply = core and core.ApplyBorderStyle
+    if type(apply) == "function" and pcall(apply, bf, st.borderSize, st.r, st.g, st.b, st.a,
+            st.texture, st.texOffX, st.texOffY, st.shiftX, st.shiftY, "actionbars", st.thickness) then
+        if bf.__mbcStrips then for i = 1, 4 do bf.__mbcStrips[i]:Hide() end end
+    else
+        euiFallbackBorder(bf, st)
+    end
+    bf:Show()
+end
+
+-- Masked shape. Returns false when the mask can't be loaded (a shape we can't
+-- resolve), so the caller falls back to the square look.
+local function euiShape(btn, icon, st)
+    if not btn.CreateMaskTexture then return false end
+    local mask = btn.__mbcEuiMask
+    if not mask then
+        mask = btn:CreateMaskTexture()
+        btn.__mbcEuiMask = mask
+    end
+    if mask:SetTexture(st.maskPath, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE") == false then
+        return false
+    end
+    mask:ClearAllPoints()
+    if st.borderOn then   -- 1px inset under a border, as the module does
+        euiPoint(mask, "TOPLEFT", btn, "TOPLEFT", 1, -1)
+        euiPoint(mask, "BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+    else
+        mask:SetAllPoints(btn)
+    end
+    mask:Show()
+    euiMask(btn, icon, mask)
+    euiMask(btn, btn.__mbcEuiFill, mask)
+    euiMask(btn, btn.__mbcLPOrb, mask)   -- the Omnium Folio orb rides under its frame
+    -- Expand the icon past the button and stretch its texcoords so the art
+    -- fills the mask opening (the module's formula and constants).
+    local exp = st.expandBase + st.expandOffset + (st.zoom - st.zoomDefault) * 200
+    if exp < 0 then exp = 0 end
+    local h = exp / 2
+    icon:ClearAllPoints()
+    euiPoint(icon, "TOPLEFT", btn, "TOPLEFT", -h, h)
+    euiPoint(icon, "BOTTOMRIGHT", btn, "BOTTOMRIGHT", h, -h)
+    local vis = math.max((128 - 2 * st.inset) / 128, 0.1)
+    local e = ((1 / vis) - 1) * 0.5
+    if icon.SetTexCoord then icon:SetTexCoord(-e, 1 + e, -e, 1 + e) end
+    -- The shape's own border, tinted; no square border under a shape.
+    local sb = btn.__mbcEuiShapeBorder
+    if not sb then
+        sb = btn:CreateTexture(nil, "OVERLAY", nil, 6)
+        btn.__mbcEuiShapeBorder = sb
+    end
+    sb:ClearAllPoints(); sb:SetAllPoints(btn)
+    if st.borderOn then
+        sb:SetTexture(st.borderPath)
+        sb:SetVertexColor(st.r, st.g, st.b, st.a)
+        sb:Show()
+    else
+        sb:Hide()
+    end
+    if btn.__mbcEuiBorder then btn.__mbcEuiBorder:Hide() end
+    return true
+end
+
+local function euiSkin(btn, icon, st)
+    if not btn.__mbcEuiFill then
+        btn.__mbcEuiFill = btn:CreateTexture(nil, "BACKGROUND", nil, -1)
+    end
+    local fill = btn.__mbcEuiFill
+    fill:ClearAllPoints(); fill:SetAllPoints(btn)
+    fill:SetColorTexture(st.fillR, st.fillG, st.fillB, st.fillA)
+    fill:Show()
+    if icon.SetDrawLayer then icon:SetDrawLayer("ARTWORK") end
+    if st.shaped and euiShape(btn, icon, st) then return end
+    euiClearShape(btn)
+    icon:ClearAllPoints(); icon:SetAllPoints(btn)
+    if icon.SetTexCoord then
+        local z = st.zoom
+        if st.shape == "cropped" then icon:SetTexCoord(z, 1 - z, z + 0.10, 1 - z - 0.10)
+        else icon:SetTexCoord(z, 1 - z, z, 1 - z) end
+    end
+    euiSquareBorder(btn, st)
+end
+
 -- Hide every skin artifact we own (and any ElvUI backdrop), so switching
 -- profiles never leaves the previous look stacked underneath.
 local function hideAllOwnSkin(btn)
@@ -352,6 +650,9 @@ local function hideAllOwnSkin(btn)
     if btn.__mbcFrame then btn.__mbcFrame:Hide() end
     if btn.__mbcBorder then btn.__mbcBorder:Hide() end
     if btn.backdrop and btn.backdrop.Hide then btn.backdrop:Hide() end
+    if btn.__mbcEuiFill then btn.__mbcEuiFill:Hide() end
+    if btn.__mbcEuiBorder then btn.__mbcEuiBorder:Hide() end
+    euiClearShape(btn)
 end
 
 -- Masque's RemoveButton doesn't un-skin (it applies a default skin), so to
@@ -366,14 +667,16 @@ local function hideMasqueLayers(btn)
 end
 
 -- Resolve the active profile from the user's choice and what's installed.
--- Returns "masque" | "elvui" | "default".
+-- Returns "masque" | "elvui" | "ellesmere" | "default".
 local function chosenSkin()
     local s = (db and db.skinStyle) or "auto"
     if s == "masque" then return MasqueGroup and "masque" or "default" end
     if s == "elvui"  then return (ELVUI and E) and "elvui" or "default" end
+    if s == "ellesmere" then return euiAvailable() and "ellesmere" or "default" end
     if s == "default" then return "default" end
     if MasqueGroup then return "masque" end        -- auto
     if ELVUI and E  then return "elvui" end
+    if euiAvailable() then return "ellesmere" end
     return "default"
 end
 
@@ -416,6 +719,12 @@ local function applySkin(btn)
             end
             if icon.SetDrawLayer then icon:SetDrawLayer("ARTWORK") end
         end)
+    elseif skin == "ellesmere" then
+        -- EllesmereUI action-bar style, read live from its settings; any
+        -- failure falls back to the default look rather than a half-skin.
+        local st = euiReadStyle()
+        local ok = st and pcall(euiSkin, btn, icon, st)
+        if not ok then hideAllOwnSkin(btn); actionBarSkin(btn, icon) end
     else
         -- Default: stock WoW action-bar slot look.
         actionBarSkin(btn, icon)
@@ -492,6 +801,35 @@ local function reskinAll()
     if chosenSkin() == "masque" and MasqueGroup and MasqueGroup.ReSkin then
         pcall(function() MasqueGroup:ReSkin() end)
     end
+end
+
+-- Follow EllesmereUI's settings live: its options UI applies changes through
+-- the action-bar module's Apply* methods (and _EAB_Apply on a profile swap).
+-- Hooking them re-skins the bar a frame later, once per burst.
+local EUI_APPLY_HOOKS = {
+    "ApplyBordersForBar", "ApplyBorders", "ApplyShapesForBar", "ApplyShapes",
+    "ApplySlotBackgroundColor",
+}
+local euiRefreshQueued = false
+local function euiRefreshNow()
+    euiRefreshQueued = false
+    if chosenSkin() == "ellesmere" then reskinAll(); layout() end
+end
+local function euiRefresh()
+    if euiRefreshQueued then return end
+    euiRefreshQueued = true
+    C_Timer.After(0, euiRefreshNow)
+end
+local euiHooked = false
+local function hookEllesmere()
+    if euiHooked then return end
+    local mod = euiActionBars()
+    if not mod then return end
+    euiHooked = true
+    for _, name in ipairs(EUI_APPLY_HOOKS) do
+        if type(mod[name]) == "function" then hooksecurefunc(mod, name, euiRefresh) end
+    end
+    if type(_G._EAB_Apply) == "function" then hooksecurefunc("_EAB_Apply", euiRefresh) end
 end
 
 local function resizeAll()
@@ -1373,12 +1711,17 @@ local function buildConfig()
         local active = chosenSkin()
         local activeText = (active == "masque" and "Masque")
             or (active == "elvui" and "ElvUI")
+            or (active == "ellesmere" and "EllesmereUI action bar")
             or "default WoW action bar"
         local note = "Currently showing: " .. activeText .. "."
         if db.skinStyle == "masque" and not MasqueGroup then
             note = note .. " (Masque not installed)"
         elseif db.skinStyle == "elvui" and not (ELVUI and E) then
             note = note .. " (ElvUI not installed)"
+        elseif db.skinStyle == "ellesmere" and not euiAvailable() then
+            note = note .. " (EllesmereUI action bars not installed)"
+        elseif active == "ellesmere" then
+            note = note .. " Follows EllesmereUI's Action Bar 1 style."
         end
         skinNote:SetText(note)
     end
@@ -1490,6 +1833,7 @@ end
 SLASH_MINIMAPICONBAR1 = "/mib"
 SLASH_MINIMAPICONBAR2 = "/minimapiconbar"
 SlashCmdList["MINIMAPICONBAR"] = function(input)
+    if disabledByEllesmere then msg(ELLESMERE_NOTICE); return end
     input = (input or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
     local cmd, arg = input:match("^(%S*)%s*(.-)$")
 
@@ -1523,7 +1867,7 @@ SlashCmdList["MINIMAPICONBAR"] = function(input)
             applySkinChoice(v)
             msg("skin profile = " .. SKIN_TEXT[v])
         else
-            print("Usage: /mib skin auto | default | elvui | masque")
+            print("Usage: /mib skin auto | default | elvui | masque | ellesmere")
         end
     elseif cmd == "profile" then
         local sub, pname = arg:match("^(%S*)%s*(.-)$")
@@ -1622,7 +1966,7 @@ SlashCmdList["MINIMAPICONBAR"] = function(input)
         print("  /mib growth DIR - down_right|down_left|up_right|up_left")
         print("  /mib move unlocked|locked  (shift-click the M also toggles lock)")
         print("  (unlock the bar, then drag icons to reorder them)")
-        print("  /mib skin auto|default|elvui|masque")
+        print("  /mib skin auto|default|elvui|masque|ellesmere")
         print("  /mib profile set|new|copy|delete NAME")
         print("  /mib inspect, dump, restrip, lock, unlock, cleanup, reset")
     end
@@ -1632,6 +1976,7 @@ end
 -- Addon Compartment (the dropdown by the minimap clock)
 -- ===========================================================================
 function MinimapIconBarCompartmentOnClick(_, arg2, arg3)
+    if disabledByEllesmere then msg(ELLESMERE_NOTICE); return end
     local mb = arg2
     if mb ~= "LeftButton" and mb ~= "RightButton" then
         mb = (arg3 == "LeftButton" or arg3 == "RightButton") and arg3 or "LeftButton"
@@ -1647,8 +1992,13 @@ function MinimapIconBarCompartmentOnEnter(_, menuButton)
     local owner = (type(menuButton) == "table" and menuButton) or _G.AddonCompartmentFrame or UIParent
     GameTooltip:SetOwner(owner, "ANCHOR_LEFT")
     GameTooltip:AddLine("Minimap Icon Bar")
-    GameTooltip:AddLine("Left-click: open / close", 0.8, 0.8, 0.8)
-    GameTooltip:AddLine("Right-click: options", 0.8, 0.8, 0.8)
+    if disabledByEllesmere then
+        GameTooltip:AddLine("Disabled: not compatible with EllesmereUI's Minimap module", 1, 0.25, 0.25)
+        GameTooltip:AddLine("Turn off the EllesmereUI Minimap module to use Minimap Icon Bar.", 0.8, 0.8, 0.8)
+    else
+        GameTooltip:AddLine("Left-click: open / close", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("Right-click: options", 0.8, 0.8, 0.8)
+    end
     GameTooltip:Show()
 end
 
@@ -1677,6 +2027,14 @@ boot:SetScript("OnEvent", function(_, event)
     end
 
     -- event == "PLAYER_LOGIN"
+    -- Stand down under EllesmereUI's Minimap module before touching anything:
+    -- nothing else is registered, so the addon stays inert for the session.
+    if ellesmereMinimapLoaded() then
+        disabledByEllesmere = true
+        msg(ELLESMERE_NOTICE)
+        return
+    end
+
     MinimapIconBarDB = MinimapIconBarDB or { profiles = {}, chars = {} }
     store = MinimapIconBarDB
     store.profiles = store.profiles or {}
@@ -1720,11 +2078,13 @@ boot:SetScript("OnEvent", function(_, event)
         C_Timer.After(delay, function() scanMinimap(); layout() end)
     end
     hookLDBIcon()
+    hookEllesmere()
     armRefresh()
 
     local skin = chosenSkin()
     local skinText = (skin == "masque" and " (Masque)")
         or (skin == "elvui" and " (ElvUI)")
+        or (skin == "ellesmere" and " (EllesmereUI)")
         or " (default skin)"
     print(PREFIX .. " loaded" .. skinText .. ". Type |cffffff00/mib|r for options.")
 end)

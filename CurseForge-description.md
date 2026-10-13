@@ -1,6 +1,6 @@
 <!-- Project Summary (the short ~150-char field on CurseForge/Wago, separate
      from this long description):
-     Collects loose minimap buttons into one movable, action-bar-style row. De-circled, skinnable (Masque/ElvUI), with optional Omnium Folio capture.
+     Collects loose minimap buttons into one movable, action-bar-style row. De-circled, skinnable (Masque/ElvUI/EllesmereUI), with optional Omnium Folio capture.
 -->
 
 # Minimap Icon Bar
@@ -24,8 +24,10 @@ stays put as it grows or shrinks.
 
 - **One-click collect/expand** from a movable toggle button.
 - **Action-bar look** by default — round minimap borders are stripped and
-  the icon is squared into a HUD slot. **Masque** and **ElvUI** skinning
-  supported and selectable per profile.
+  the icon is squared into a HUD slot. **Masque**, **ElvUI**, and
+  **EllesmereUI** skinning supported and selectable per profile; the
+  EllesmereUI skin follows your Action Bar 1 style live, button shapes
+  included.
 - **Configurable layout**: button size, spacing, whole-bar scale,
   buttons-per-row, and growth direction (right/left × up/down).
 - **Drag-to-reorder** icons; order saved per profile.
@@ -47,5 +49,10 @@ skin, profile, cleanup, reset).
 
 ## Compatibility
 
-WoW Midnight. No required dependencies; Masque and
-ElvUI are optional and used only for skinning if present.
+WoW Midnight. No required dependencies; Masque, ElvUI, and
+EllesmereUI are optional and used only for skinning if present.
+
+**EllesmereUI's Minimap module is not compatible.** That module is its own
+minimap controller and takes over the minimap buttons, so Minimap Icon Bar
+disables itself (with a notice) while it's loaded. Turn off just that module
+and the addon works alongside the rest of EllesmereUI.

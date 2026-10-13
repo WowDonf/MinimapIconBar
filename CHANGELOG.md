@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.3.0
+
+- **New: EllesmereUI action-bar skin.** A fifth skin profile that makes the
+  bar look like your EllesmereUI action bars: the same slot fill, icon zoom,
+  border style and colour (solid, textured, or LibSharedMedia, class-coloured
+  if you have that on), and button shape - circle, hexagon, diamond, shield,
+  and the rest - with the matching shape border. It reads Action Bar 1's
+  settings live, so changing them in EllesmereUI updates the bar on the spot,
+  and the shapes and their metrics come from EllesmereUI itself, so any shape
+  a future EllesmereUI release adds shows up without an update here. Pick it
+  under *Skin profile* (or `/mib skin ellesmere`); *Automatic* chooses it when
+  EllesmereUI's action bars are installed and neither Masque nor ElvUI is.
+- **EllesmereUI's Minimap module is not supported.** That module is its own
+  minimap controller and takes over the minimap buttons, so Minimap Icon Bar
+  now stands down while it's loaded: it builds nothing and prints a notice at
+  login (and from `/mib` and its addon-compartment entry). Turn that one
+  module off (EllesmereUI's module power button, or the AddOns list) and
+  Minimap Icon Bar works alongside the rest of EllesmereUI.
+- **Supports game version 12.1.5** alongside 12.1.0; the 12.0.7 interface is
+  dropped now that 12.1.0 is live. Nothing the addon relies on changed in
+  12.1.5.
+
 ## v1.2.1
 
 - **Fixed**: with the Omnium Folio option on, the expansion landing-page
